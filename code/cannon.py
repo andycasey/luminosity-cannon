@@ -3,10 +3,12 @@
 
 """ Cannon for stellar distances """
 
+import cPickle as pickle
 import logging
 import numpy as np
 import sys
 
+import scipy.optimize as op
 from astropy.table import Table
 
 
@@ -17,7 +19,6 @@ logger = logging.getLogger("sick")
 
 
 class CannonModel(object):
-
 
     def __init__(self, labels, fluxes, flux_uncertainties):
         """
@@ -72,7 +73,8 @@ class CannonModel(object):
 
 
 
-    def train(self, label_vector_description, N=None, limits=None, pivot=True):
+    def train(self, label_vector_description, N=None, limits=None, pivot=False,
+        **kwargs):
 
 
         # Save and interpret the label vector description.
@@ -84,9 +86,10 @@ class CannonModel(object):
             self._labels, lv, N, limits, pivot)
 
 
-        N_stars, N_pixels = self._fluxes.shape
+        N_stars, N_pixels = self._fluxes.shape[:2]
         scatter = np.nan * np.ones(N_pixels)
-        coefficients = np.nan * np.ones((N_pixels, lva.shape[1]))
+        #coefficients = np.nan * np.ones((N_pixels, lva.shape[1]))
+        coefficients = np.memmap("tmp", dtype=float, mode="w+", shape=(N_pixels, lva.shape[1]))
 
         increment = int(N_pixels / 100)
         progressbar = kwargs.pop("__progressbar", True)
@@ -96,7 +99,7 @@ class CannonModel(object):
             sys.stdout.flush()
 
         for i in xrange(N_pixels):
-            if progressbar and (i % increment) == 0:
+            if progressbar and (i == 0 or i % increment == 0):
                 sys.stdout.write("\r[{done}{not_done}] {percent:3.0f}%".format(
                     done="=" * int((i + 1) / increment),
                     not_done=" " * int((N_pixels - i - 1)/ increment),
@@ -104,7 +107,7 @@ class CannonModel(object):
                 sys.stdout.flush()
 
             coefficients[i, :], scatter[i] = _fit_pixel(
-                self._fluxes[:, i], self._flux_uncertainties[:, i], lv_array)
+                self._fluxes[:, i], self._flux_uncertainties[:, i], lva)
 
         if progressbar:
             sys.stdout.write("\r\n")
@@ -138,7 +141,7 @@ class CannonModel(object):
         repr_param = lambda d: (d + "^").split("^")[0].strip()
 
         theta = []
-        for description in human_readable_label_vector:
+        for description in label_vector_description:
 
             # Is it just a parameter?
             try:
@@ -171,7 +174,7 @@ class CannonModel(object):
                 theta.append([(description.strip(), order(description))])
 
         logger.info("Training the Cannon model using the following description "
-            "of the label vector: {0}".format(self._repr_label_vector(theta)))
+            "of the label vector: {0}".format(self._repr_label_vector_description(theta)))
 
         return theta
 
@@ -181,12 +184,11 @@ class CannonModel(object):
         string = ["1"]
         for cross_terms in label_vector_indices:
             sub_string = []
-            for index, order in cross_terms:
-                _ = self.grid_points.dtype.names[index]
+            for descr, order in cross_terms:
                 if order > 1:
-                    sub_string.append("{0}^{1}".format(_, order))
+                    sub_string.append("{0}^{1}".format(descr, order))
                 else:
-                    sub_string.append(_)
+                    sub_string.append(descr)
             string.append(" * ".join(sub_string))
         return " + ".join(string)
 
@@ -273,12 +275,11 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
 
 
 def _build_label_vector_rows(label_vector, labels):
-    labels = np.atleast_2d(labels)
-    columns = [np.ones(labels.shape[0])]
+    columns = [np.ones(len(labels))]
     for cross_terms in label_vector:
         column = 1
-        for index, order in cross_terms:
-            column *= labels[:, index]**order
+        for descr, order in cross_terms:
+            column *= labels[descr].flatten()**order
         columns.append(column)
 
     return np.vstack(columns).T
@@ -304,10 +305,11 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
 
     labels = labels[indices]
     if pivot:
+        raise NotImplementedError
         offsets = labels.mean(axis=0)
         labels -= offsets
     else:
-        offsets = np.zeros(len(self.grid_points.dtype.names))
+        offsets = np.zeros(len(labels.colnames))
 
     return (_build_label_vector_rows(label_vector, labels), indices, offsets)
 
@@ -324,13 +326,19 @@ if __name__ == "__main__":
         stars = pickle.load(fp)
 
     data = np.memmap("hipparcos-spectra.memmap", mode="r", dtype=float)
-    data = data.reshape(len(stars), -1, 2)
+    data = data.reshape(len(stars) + 1, -1, 2)
 
-    fluxes, flux_uncertainties = data[1:, :, ::2], data[1:, :, 1::2]
+    fluxes = data[1:, :, ::2]
+    flux_uncertainties = data[1:, :, 1::2]
+
+    # fuck zeros:
+    ok = np.where(np.sum(fluxes > 0, axis=1) > 0)
+    fluxes = fluxes[:, ok].reshape(len(stars), -1)
+    flux_uncertainties = flux_uncertainties[:, ok].reshape(len(stars), -1)
 
     labels = Table.read("master_table_hip_harps.dat", format="ascii")
     # Ensure the labels are sorted the same as the stars
-    sort_indices = np.array([labels["Star"].index(star) for star in stars])
+    sort_indices = np.array([np.where(labels["Star"] == star)[0] for star in stars])
     labels = labels[sort_indices]
 
     model = CannonModel(labels, fluxes, flux_uncertainties)
