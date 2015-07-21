@@ -31,6 +31,7 @@ def create_data_arrays(filename_prefix, spectrum_filenames, wavelength_atol=1e-8
     data[0, :, 1] = 0 # Set the 'uncertainty' on lambda as zero.
 
     for i, spectrum_filename in enumerate(spectrum_filenames):
+        if i < 230: continue
         spectrum_data = load_original_spectra(spectrum_filename, **kwargs)
 
         # Ensure the binning is the same.        
@@ -50,4 +51,10 @@ if __name__ == "__main__":
     
 
     # Write stuff to disk.
-    create_data_arrays("hipparcos-spectra", glob("original-spectra/*.gz"))
+    filenames = glob("original-spectra/*.gz")
+    
+    # Ignore the Sun and 18Sco because they are on a different lambda scale
+    n = len(filenames)
+    filenames = list(set(filenames).difference(["original-spectra/18Sco_HARPS.txt.gz", "original-spectra/Sun_HARPS.txt.gz"])) 
+    assert len(filenames) == n - 2
+    create_data_arrays("hipparcos-spectra", filenames) 

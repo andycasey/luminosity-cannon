@@ -11,3 +11,7 @@
 # Cross-validation tests: estimate % and confirm it does not vary as fraction of distnace.
 
 
+
+
+Notes:
+- Ignored 18 Sco and the Sun because they had a different number a pixels than the rest of the stars
