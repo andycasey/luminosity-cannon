@@ -3,9 +3,17 @@
 
 """ Cannon for stellar distances """
 
+import logging
 import numpy as np
+import sys
 
 from astropy.table import Table
+
+
+# Set up logging.
+logging.basicConfig(level=logging.DEBUG, 
+    format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("sick")
 
 
 class CannonModel(object):
@@ -64,13 +72,58 @@ class CannonModel(object):
 
 
 
-    def train(self, label_vector_description):
+    def train(self, label_vector_description, N=None, limits=None, pivot=True):
+
+
+        # Save and interpret the label vector description.
+        self._label_vector_description = label_vector_description
+        lv = self._interpret_label_vector_description(label_vector_description)
+
+        # Build the label vector array.
+        lva, star_indices, offsets = _build_label_vector_array(
+            self._labels, lv, N, limits, pivot)
+
+
+        N_stars, N_pixels = self._fluxes.shape
+        scatter = np.nan * np.ones(N_pixels)
+        coefficients = np.nan * np.ones((N_pixels, lva.shape[1]))
+
+        increment = int(N_pixels / 100)
+        progressbar = kwargs.pop("__progressbar", True)
+        if progressbar:
+            sys.stdout.write("\rTraining Cannon model from {} points:\n".format(
+                star_indices.size))
+            sys.stdout.flush()
+
+        for i in xrange(N_pixels):
+            if progressbar and (i % increment) == 0:
+                sys.stdout.write("\r[{done}{not_done}] {percent:3.0f}%".format(
+                    done="=" * int((i + 1) / increment),
+                    not_done=" " * int((N_pixels - i - 1)/ increment),
+                    percent=100. * (i + 1)/N_pixels))
+                sys.stdout.flush()
+
+            coefficients[i, :], scatter[i] = _fit_pixel(
+                self._fluxes[:, i], self._flux_uncertainties[:, i], lv_array)
+
+        if progressbar:
+            sys.stdout.write("\r\n")
+            sys.stdout.flush()
+
+
+
+
+
+
         raise NotImplementedError
 
 
 
     def solve_labels(self, fluxes, flux_uncertainties):
         raise NotImplementedError
+
+
+
 
 
 
@@ -82,8 +135,7 @@ class CannonModel(object):
 
         order = lambda t: int((t.split("^")[1].strip() + " ").split(" ")[0]) \
             if "^" in t else 1
-        parameter_index = lambda d: \
-            self._labels.colnames.index((d + "^").split("^")[0].strip())
+        repr_param = lambda d: (d + "^").split("^")[0].strip()
 
         theta = []
         for description in human_readable_label_vector:
@@ -98,17 +150,17 @@ class CannonModel(object):
                     cross_terms = []
                     for cross_term in description.split("*"):
                         try:
-                            index = parameter_index(cross_term)
+                            index = repr_param(cross_term)
                         except ValueError:
                             raise ValueError("couldn't interpret '{0}' in the "\
                                 "label '{1}' as a parameter coefficient".format(
                                     *map(str.strip, (cross_term, description))))
-                        cross_terms.append((index, order(cross_term)))
+                        cross_terms.append((cross_term, order(cross_term)))
                     theta.append(cross_terms)
 
                 elif "^" in description:
                     theta.append([(
-                        parameter_index(description),
+                        repr_param(description),
                         order(description)
                     )])
 
@@ -116,7 +168,7 @@ class CannonModel(object):
                     raise ValueError("could not interpret '{0}' as a parameter"\
                         " coefficient description".format(description))
             else:
-                theta.append([(index, order(description))])
+                theta.append([(description.strip(), order(description))])
 
         logger.info("Training the Cannon model using the following description "
             "of the label vector: {0}".format(self._repr_label_vector(theta)))
@@ -150,6 +202,117 @@ class CannonModel(object):
         raise NotImplementedError
 
 
+def _fit_coefficients(intensities, u_intensities, scatter, lv_array,
+    full_output=False):
+
+    # For a given scatter, return the best-fit coefficients.    
+    variance = u_intensities**2 + scatter**2
+
+    CiA = lv_array * np.tile(1./variance, (lv_array.shape[1], 1)).T
+    ATCiAinv = np.linalg.inv(np.dot(lv_array.T, CiA))
+
+    Y = intensities/variance
+    ATY = np.dot(lv_array.T, Y)
+    coefficients = np.dot(ATCiAinv, ATY)
+
+    if full_output:
+        return (coefficients, ATCiAinv)
+    return coefficients
+
+
+def _pixel_scatter_ln_likelihood(ln_scatter, intensities, u_intensities,
+    lv_array, debug=False):
+    
+    scatter = np.exp(ln_scatter)
+
+    try:
+        # Calculate the coefficients for this level of scatter.
+        coefficients = _fit_coefficients(intensities, u_intensities, scatter,
+            lv_array)
+
+    except np.linalg.linalg.LinAlgError:
+        if debug: raise
+        return -np.inf
+
+    model = np.dot(coefficients, lv_array.T)
+    variance = u_intensities**2 + scatter**2
+
+    return -0.5 * np.sum((intensities - model)**2 / variance) \
+        - 0.5 * np.sum(np.log(variance))
+
+
+def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
+
+    # Get an initial guess of the scatter.
+    scatter = np.var(fluxes) - np.median(flux_uncertainties)**2
+    scatter = np.sqrt(scatter) if scatter >= 0 else np.std(fluxes)
+
+    ln_scatter = np.log(scatter)
+
+    # Optimise the scatter, and at each scatter value we will calculate the
+    # optimal vector coefficients.
+    nll = lambda ln_s, *a, **k: -_pixel_scatter_ln_likelihood(ln_s, *a, **k)
+    op_scatter = np.exp(op.fmin_powell(nll, ln_scatter,
+        args=(fluxes, flux_uncertainties, lv_array), disp=False))
+
+    # Calculate the coefficients at the optimal scatter value.
+    # Note that if we can't solve for the coefficients, we should just set them
+    # as zero and send back a giant variance.
+    try:
+        coefficients = _fit_coefficients(fluxes, flux_uncertainties, op_scatter,
+            lv_array)
+
+    except np.linalg.linalg.LinAlgError:
+        logger.exception("Failed to calculate coefficients")
+        if debug: raise
+
+        return (np.zeros(lv_array.shape[1]), 10e8)
+
+    else:
+        return (coefficients, op_scatter)
+
+
+def _build_label_vector_rows(label_vector, labels):
+    labels = np.atleast_2d(labels)
+    columns = [np.ones(labels.shape[0])]
+    for cross_terms in label_vector:
+        column = 1
+        for index, order in cross_terms:
+            column *= labels[:, index]**order
+        columns.append(column)
+
+    return np.vstack(columns).T
+
+
+def _build_label_vector_array(labels, label_vector, N=None, limits=None,
+    pivot=True):
+
+    logger.debug("Building Cannon label vector array")
+
+    indices = np.ones(len(labels), dtype=bool)
+    if limits is not None:
+        for parameter, (lower_limit, upper_limit) in limits.items():
+            indices *= (upper_limit >= labels[parameter]) * \
+                (labels[parameter] >= lower_limit)
+
+    if N is not None:
+        _ = np.linspace(0, indices.sum() - 1, N, dtype=int)
+        indices = np.where(indices)[0][_]   
+    
+    else:
+        indices = np.where(indices)[0]
+
+    labels = labels[indices]
+    if pivot:
+        offsets = labels.mean(axis=0)
+        labels -= offsets
+    else:
+        offsets = np.zeros(len(self.grid_points.dtype.names))
+
+    return (_build_label_vector_rows(label_vector, labels), indices, offsets)
+
+
+
 
 
 
@@ -170,6 +333,8 @@ if __name__ == "__main__":
     sort_indices = np.array([labels["Star"].index(star) for star in stars])
     labels = labels[sort_indices]
 
-    a = CannonModel(labels, fluxes, flux_uncertainties)
+    model = CannonModel(labels, fluxes, flux_uncertainties)
+    model.train("plx^2")
+    
 
     raise a
