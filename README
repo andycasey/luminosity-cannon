@@ -1,0 +1,13 @@
+
+
+[x] Need hipparcos distances, absolute luminosities and dereddened colors
+
+# Check all data are RV'd and norm'd OK.
+
+[x] Check that all data are binned on the same pixels.
+
+# Build cannon model with luminosities and colors
+
+# Cross-validation tests: estimate % and confirm it does not vary as fraction of distnace.
+
+
