@@ -31,7 +31,6 @@ def create_data_arrays(filename_prefix, spectrum_filenames, wavelength_atol=1e-8
     data[0, :, 1] = 0 # Set the 'uncertainty' on lambda as zero.
 
     for i, spectrum_filename in enumerate(spectrum_filenames):
-        if i < 230: continue
         spectrum_data = load_original_spectra(spectrum_filename, **kwargs)
 
         # Ensure the binning is the same.        
