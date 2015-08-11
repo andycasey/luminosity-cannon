@@ -12,6 +12,7 @@ import numpy as np
 import sys
 from itertools import chain
 from warnings import simplefilter
+from time import time #TODO remove
 
 import scipy.optimize as op
 from astropy.table import Table
@@ -667,6 +668,38 @@ def _pixel_scatter_nll(scatter, fluxes, flux_uncertainties,
 
 
 def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
+    """
+    Return the optimal label vector coefficients and scatter for a pixel, given
+    the fluxes, uncertainties, and the label vector array.
+
+    :param fluxes:
+        The fluxes for the given pixel, from all stars.
+
+    :type fluxes:
+        :class:`~np.array`
+
+    :param flux_uncertainties:
+        The 1-sigma flux uncertainties for the given pixel, from all stars.
+
+    :type flux_uncertainties:
+        :class:`~np.array`
+
+    :param lv_array:
+        The label vector array. This should have shape `(N_stars, N_terms + 1)`.
+
+    :type lv_array:
+        :class:`~np.ndarray`
+
+    :param debug: [optional]
+        Re-raise exceptions that would otherwise be suppressed (and a large
+        scatter provided).
+
+    :type debug:
+        bool
+
+    :returns:
+        The optimised label vector coefficients and scatter for this pixel.
+    """
 
     # Get an initial guess of the scatter.
     scatter = np.var(fluxes) - np.median(flux_uncertainties)**2
@@ -685,7 +718,7 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
             lv_array)
 
     except np.linalg.linalg.LinAlgError:
-        logger.exception("Failed to calculate coefficients:")
+        logger.exception("Failed to calculate coefficients")
         if debug: raise
 
         return (np.zeros(lv_array.shape[1]), 10e8)
