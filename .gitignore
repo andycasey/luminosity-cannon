@@ -1,0 +1,17 @@
+.gitignore
+*.pyc
+
+*.aux
+*.bbl
+*.blg
+*.dvi
+*.log
+*.pdf
+*.ps
+
+*.memmap
+*.pkl
+*.fits
+*.fits.*
+
+data/
