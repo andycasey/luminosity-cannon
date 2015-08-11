@@ -1,7 +1,7 @@
 The Billion Dollar Ground Mission™
 ==================================
 
-**Opposed to *Gaia: The Billion Dollar Space Mission***
+(Opposed to *Gaia: The Billion Dollar Space Mission*)
 
 [![Build Status](https://travis-ci.org/andycasey/luminosity-cannon.svg?branch=master)](https://travis-ci.org/andycasey/luminosity-cannon)
 
