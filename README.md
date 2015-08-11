@@ -15,5 +15,6 @@ Authors
 - Hans-Walter Rix (MPIA)
 - Gerry Gilmore (Cambridge)
 - Anna Ho (MPIA)
+- Keith Hawkins (Cambridge)
 
 Copyright 2015 the authors. All rights reserved.

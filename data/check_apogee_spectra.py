@@ -43,12 +43,14 @@ def get_differences(apStar_filename):
 def plot_differences(differences):
 
     fig, ax = plt.subplots(1)
-    ax.hist(differences, bins=100)
-    ax.set_title("mu = {0:.1f}, sigma = {1:.1f}".format(
-        np.median(differences), np.std(differences)))
+    y_bin, x_bin, _ = ax.hist(differences, bins=100, facecolor="#666666")
+    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 1000)
+    y = np.exp(-0.5*x**2)/np.sqrt(2*np.pi)
+    ax.plot(x, y*np.trapz(y_bin, x=x_bin[1:])/np.sqrt(2*np.pi), lw=2, c="r")
+    ax.set_title("mu = {0:.1f}, sigma(|d|) = {1:.1f}".format(
+        np.median(differences), np.std(np.abs(differences))))
 
     ax.set_xlabel("(F1 - F2)/sqrt(sigma_1^2 + sigma_2^2)")
-
     return fig
 
 
