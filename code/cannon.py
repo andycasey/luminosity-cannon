@@ -556,8 +556,6 @@ class CannonModel(object):
         return True
 
 
-
-
 def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
     full_output=False):
     """
@@ -597,8 +595,7 @@ def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
     CiA = lv_array * np.tile(1./variance, (lv_array.shape[1], 1)).T
     ATCiAinv = np.linalg.inv(np.dot(lv_array.T, CiA))
 
-    Y = fluxes/variance
-    ATY = np.dot(lv_array.T, Y)
+    ATY = np.dot(lv_array.T, fluxes/variance)
     coefficients = np.dot(ATCiAinv, ATY)
 
     if full_output:
@@ -606,15 +603,15 @@ def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
     return coefficients
 
 
-def _pixel_scatter_ln_likelihood(ln_scatter, fluxes, flux_uncertainties,
+def _pixel_scatter_nll(scatter, fluxes, flux_uncertainties,
     lv_array, debug=False):
     """
-    Return the log-likelihood for the scatter in a single pixel.
+    Return the negative log-likelihood for the scatter in a single pixel.
 
-    :param ln_scatter:
-        The logarithm of the scatter.
+    :param scatter:
+        The model scatter in the pixel.
 
-    :type ln_scatter:
+    :type scatter:
         float
 
     :param fluxes:
@@ -650,7 +647,9 @@ def _pixel_scatter_ln_likelihood(ln_scatter, fluxes, flux_uncertainties,
         If there was an error in inverting a matrix, and `debug` is set to True.
     """
     
-    scatter = np.exp(ln_scatter)
+    if 0 > scatter:
+        return -np.inf
+
     try:
         # Calculate the coefficients for the given level of scatter.
         coefficients \
@@ -663,8 +662,8 @@ def _pixel_scatter_ln_likelihood(ln_scatter, fluxes, flux_uncertainties,
     model = np.dot(coefficients, lv_array.T)
     variance = flux_uncertainties**2 + scatter**2
 
-    return -0.5 * np.sum((fluxes - model)**2 / variance) \
-        -0.5 * np.sum(np.log(variance))
+    return 0.5 * np.sum((fluxes - model)**2 / variance) \
+        + 0.5 * np.sum(np.log(variance))
 
 
 def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
@@ -673,13 +672,10 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
     scatter = np.var(fluxes) - np.median(flux_uncertainties)**2
     scatter = np.sqrt(scatter) if scatter >= 0 else np.std(fluxes)
 
-    ln_scatter = np.log(scatter)
-
     # Optimise the scatter, and at each scatter value we will calculate the
     # optimal vector coefficients.
-    nll = lambda ln_s, *a, **k: -_pixel_scatter_ln_likelihood(ln_s, *a, **k)
-    op_scatter = np.exp(op.fmin_powell(nll, ln_scatter,
-        args=(fluxes, flux_uncertainties, lv_array), disp=False))
+    op_scatter = op.fmin_powell(_pixel_scatter_nll, scatter,
+        args=(fluxes, flux_uncertainties, lv_array), disp=False) 
 
     # Calculate the coefficients at the optimal scatter value.
     # Note that if we can't solve for the coefficients, we should just set them
@@ -689,7 +685,7 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
             lv_array)
 
     except np.linalg.linalg.LinAlgError:
-        logger.exception("Failed to calculate coefficients")
+        logger.exception("Failed to calculate coefficients:")
         if debug: raise
 
         return (np.zeros(lv_array.shape[1]), 10e8)
@@ -699,7 +695,33 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
 
 
 def _build_label_vector_rows(label_vector, labels):
+    """
+    Build a label vector row from a description of the label vector (as indices
+    and orders to the power of) and the label values themselves.
 
+    For example: if the first item of `labels` is `A`, and the label vector
+    description is `A^3` then the first item of `label_vector` would be:
+
+    `[[(0, 3)], ...`
+
+    This indicates the first label item (index `0`) to the power `3`.
+
+    :param label_vector:
+        An `(index, order)` description of the label vector. 
+
+    :type label_vector:
+        list
+
+    :param labels:
+        The values of the corresponding labels.
+
+    :type labels:
+        list
+
+    :returns:
+        The corresponding label vector row.
+    """
+    
     columns = [np.ones(len(labels))]
     for cross_terms in label_vector:
         column = 1
@@ -709,6 +731,7 @@ def _build_label_vector_rows(label_vector, labels):
 
     try:
         return np.vstack(columns).T
+
     except ValueError:
         columns[0] = np.ones(1)
         return np.vstack(columns).T
@@ -716,6 +739,47 @@ def _build_label_vector_rows(label_vector, labels):
 
 def _build_label_vector_array(labels, label_vector, N=None, limits=None,
     pivot=True):
+    """
+    Build the label vector array.
+
+    :param labels:
+        The labels for each star as a table. This should have `N_star` rows.
+
+    :type labels:
+        :class:`~astropy.table.Table`
+
+    :param label_vector:
+        The label vector description in `(index, order)` form.
+
+    :type label_vector`
+        list
+
+    :param N: [optional]
+        The number of stars to use for the label vector array. If None is given,
+        then all stars (rows) will be used.
+
+    :type N:
+        int
+
+    :param limits: [optional]
+        Place limits on the labels to train with. This should be provided as a
+        dictionary where the labels are keys and two-length tuples of
+        `(lower, upper)` values are given as values.
+
+    :type limits:
+        dict
+
+    :param pivot: [optional]
+        Pivot about some mean label values.
+
+    :type pivot:
+        bool
+
+    :returns:
+        A three-length tuple containing the label vector array, the indices of
+        stars (rows) from `labels` that were used (in case `N` and/or `limits`
+        were provided) and the coefficient offsets (for when `pivot` is True).
+    """
 
     logger.debug("Building Cannon label vector array")
 
@@ -725,13 +789,10 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
             indices *= (upper_limit >= labels[parameter]) * \
                 (labels[parameter] >= lower_limit)
 
+    indices = np.where(indices)[0]
     if N is not None:
-        _ = np.linspace(0, indices.sum() - 1, N, dtype=int)
-        indices = np.where(indices)[0][_]   
+        indices = indices[np.linspace(0, indices.sum() - 1, N, dtype=int)]
     
-    else:
-        indices = np.where(indices)[0]
-
     labels = labels[indices]
     if pivot:
         raise NotImplementedError
