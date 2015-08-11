@@ -15,8 +15,12 @@ APOGEE_DATA_FOLDER = "APOGEE/"
 
 data = fits.open("APOGEE-allStar-v603-Hipparcos.fits.gz")[1].data
 
+if (APSTAR or ASPCAP) and not os.path.exists(APOGEE_DATA_FOLDER):
+    os.mkdir(APOGEE_DATA_FOLDER)
+
 if APSTAR:
 
+    # Get the apStar data.
     command = ("wget -O {APOGEE_DATA_FOLDER}/apStar/HIP{hip}.fits"
         " http://data.sdss3.org/sas/dr12/apogee/spectro/redux/r5/"
         "stars/{telescope}/{field}/{file}")
@@ -34,7 +38,7 @@ if APSTAR:
     
 if ASPCAP:
 
-    # Get the aspCap stuff.
+    # Get the aspCap data.
     command = ("wget -O {APOGEE_DATA_FOLDER}/aspCap/HIP{hip}.fits"
         " http://data.sdss3.org/sas/dr12/apogee/spectro/redux/r5/"
         "stars/l25_6d/v603/{field}/{file}")
