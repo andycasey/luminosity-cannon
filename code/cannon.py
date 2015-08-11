@@ -3,7 +3,9 @@
 
 """ Cannon for stellar distances """
 
+import bencode
 import cPickle as pickle
+import hashlib
 import logging
 import numpy as np
 import sys
@@ -51,6 +53,44 @@ class CannonModel(object):
             :class:`np.ndarray`
         """
 
+        self._check_data(labels, fluxes, flux_uncertainties)
+
+        self._trained = False
+        self._labels = labels
+        self._label_vector_description = None
+        self._fluxes, self._flux_uncertainties = fluxes, flux_uncertainties
+
+        if verify:
+            self._check_forbidden_label_characters("^*")
+        return None
+
+
+    def _check_data(self, labels, fluxes, flux_uncertainties):
+        """
+        Check that the labels, flux and flux uncertainty data is OK.
+
+        :param labels:
+            A table with columns as labels, and stars as rows.
+
+        :type labels:
+            :class:`~astropy.table.Table`
+
+        :param fluxes:
+            An array of fluxes for each star as shape (num_stars, num_pixels).
+            The num_stars should match the rows in `labels`.
+
+        :type fluxes:
+            :class:`np.ndarray`
+
+        :param flux_uncertainties:
+            An array of 1-sigma flux uncertainties for each star as shape
+            (num_stars, num_pixels). The shape of the `flux_uncertainties` array
+            should match the `fluxes` array. 
+
+        :type flux_uncertainties:
+            :class:`np.ndarray`
+        """
+
         fluxes = np.atleast_2d(fluxes)
         flux_uncertainties = np.atleast_2d(flux_uncertainties)
 
@@ -65,41 +105,63 @@ class CannonModel(object):
         if len(labels) == 0:
             raise ValueError("no stars (labels) given")
 
-        self._trained = False
-        self._labels = labels
-        self._fluxes = fluxes
-        self._flux_uncertainties = flux_uncertainties
-        self._label_vector_description = None
-
-        if verify:
-            self._check_forbidden_label_characters("^*")
-
         return None
-
 
 
     def train(self, label_vector_description, N=None, limits=None, pivot=False,
         **kwargs):
+        """
+        Train a Cannon model based on the label vector description provided.
 
+        :params label_vector_description:
+            The human-readable form of the label vector description.
 
-        # Save and interpret the label vector description.
+        :type label_vector_description:
+            str
+
+        :param N: [optional]
+            Limit the number of stars used in the training set. If left to None,
+            all stars will be used.
+
+        :type N:
+            None or int
+
+        :param limits: [optional]
+            A dictionary containing labels (keys) and upper/lower limits (as a
+            two-length tuple).
+
+        :type limits:
+            dict
+
+        :param pivot: [optional]
+            Pivot the data about the labels.
+
+        :type pivot:
+            bool
+
+        :returns:
+            A three-length tuple containing the model coefficients, the scatter
+            in each pixel, and the label offsets.
+        """
+
         self._label_vector_description = label_vector_description
-        lv = self._parse_label_vector_description(label_vector_description)
-
+        
         # Build the label vector array.
-        lva, star_indices, offsets = _build_label_vector_array(
-            self._labels, lv, N, limits, pivot)
+        lv = self._parse_label_vector_description(label_vector_description)
+        lva, star_indices, offsets = _build_label_vector_array(self._labels, lv,
+            N, limits, pivot)
 
-
+        # Initialise the requisite arrays.
         N_stars, N_pixels = self._fluxes.shape[:2]
         scatter = np.nan * np.ones(N_pixels)
         coefficients = np.nan * np.ones((N_pixels, lva.shape[1]))
         
+        # Display a progressbar unless requested otherwise.
         increment = int(N_pixels / 100)
         progressbar = kwargs.pop("__progressbar", True)
         if progressbar:
-            sys.stdout.write("\rTraining Cannon model from {0} stars with {1} pixels each:\n".format(
-                N_stars, N_pixels))
+            sys.stdout.write("\rTraining Cannon model from {0} stars with {1} "\
+                "pixels each:\n".format(N_stars, N_pixels))
             sys.stdout.flush()
 
         for i in xrange(N_pixels):
@@ -341,7 +403,7 @@ class CannonModel(object):
         return " + ".join(string)
 
 
-    def save(self, filename, overwrite=False):
+    def save(self, filename, overwrite=False, verify=True):
         """
         Save the (trained) model to disk. This will save the label vector
         description, the optimised coefficients and scatter, and pivot offsets.
@@ -369,16 +431,23 @@ class CannonModel(object):
             raise TypeError("the model has not been trained; there is nothing "
                 "to save")
 
+        # Create a hash of the labels, fluxes and flux uncertainties.
+        if verify:
+            hashes = [hash(str(_)) for _ in \
+                (self._labels, self._fluxes, self._flux_uncertainties)]
+        else:
+            hashes = None
+
         contents = \
             (self._label_vector_description, self._coefficients, self._scatter,
-                self._offsets)
+                self._offsets, hashes)
         with open(filename, "w") as fp:
             pickle.dump(contents, fp, -1)
 
         return True
 
 
-    def load(self, filename):
+    def load(self, filename, verify=True):
         """
         Load a trained model from disk.
 
@@ -388,18 +457,41 @@ class CannonModel(object):
         :type filename:
             str
 
+        :param verify: [optional]
+            Verify whether the hashes in the stored filename match what is
+            expected from the label, flux and flux uncertainty arrays.
+
+        :type verify:
+            bool
+
         :returns:
             True
 
         :raises IOError:
             If the model could not be loaded.
+
+        :raises ValueError:
+            If the current hash of the labels, fluxes, or flux uncertainties is
+            different than what was stored in the filename. Disable this option
+            (at your own risk) by setting `verify` to False.
         """
 
         with open(filename, "r") as fp:
             contents = pickle.load(fp)
 
+        hashes = contents[-1]
+        if verify and hashes is not None:
+            exp_hash = [hash(str(_)) for _ in \
+                (self._labels, self._fluxes, self._flux_uncertainties)]
+            descriptions = ("labels", "fluxes", "flux_uncertainties")
+            for e_hash, r_hash, descr in zip(exp_hash, hashes, descriptions):
+                if e_hash != r_hash:
+                    raise ValueError("expected hash for {0} ({1}) is different "
+                        "to that stored in {2} ({3})".format(descr, e_hash,
+                            filename, r_hash)) 
+
         self._label_vector_description, self._coefficients, self._scatter, \
-            self._offsets = contents
+            self._offsets, hashes = contents
         self._trained = True
 
         return True
@@ -407,16 +499,46 @@ class CannonModel(object):
 
 
 
-def _fit_coefficients(intensities, u_intensities, scatter, lv_array,
+def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
     full_output=False):
+    """
+    Fit model coefficients and scatter to a given set of normalised fluxes for a
+    single pixel.
 
-    # For a given scatter, return the best-fit coefficients.    
-    variance = u_intensities**2 + scatter**2
+    :param fluxes:
+        The normalised fluxes for a single pixel (in many stars).
 
+    :type fluxes:
+        :class:`~np.array`
+
+    :param flux_uncertainties:
+        The 1-sigma uncertainties in normalised fluxes. This should have the
+        same shape as `fluxes`.
+
+    :type flux_uncertainties:
+        :class:`~np.array`
+
+    :param lv_array:
+        The label vector array for each pixel.
+
+    :type lv_array:
+        :class:`~np.ndarray`
+
+    :param full_output: [optional]
+        Return the coefficients and the covariance matrix.
+
+    :type full_output:
+        bool
+
+    :returns:
+        The label vector coefficients for the pixel.
+    """
+
+    variance = flux_uncertainties**2 + scatter**2
     CiA = lv_array * np.tile(1./variance, (lv_array.shape[1], 1)).T
     ATCiAinv = np.linalg.inv(np.dot(lv_array.T, CiA))
 
-    Y = intensities/variance
+    Y = fluxes/variance
     ATY = np.dot(lv_array.T, Y)
     coefficients = np.dot(ATCiAinv, ATY)
 
@@ -425,14 +547,54 @@ def _fit_coefficients(intensities, u_intensities, scatter, lv_array,
     return coefficients
 
 
-def _pixel_scatter_ln_likelihood(ln_scatter, intensities, u_intensities,
+def _pixel_scatter_ln_likelihood(ln_scatter, fluxes, flux_uncertainties,
     lv_array, debug=False):
+    """
+    Return the log-likelihood for the scatter in a single pixel.
+
+    :param ln_scatter:
+        The logarithm of the scatter.
+
+    :type ln_scatter:
+        float
+
+    :param fluxes:
+        The fluxes for a given pixel (in many stars).
+
+    :type fluxes:
+        :class:`~np.array`
+
+    :param flux_uncertainties:
+        The 1-sigma uncertainties in the fluxes for a given pixel. This should
+        have the same shape as `fluxes`.
+
+    :type flux_uncertainties:
+        :class:`~np.array`
+
+    :param lv_array:
+        The label vector array for each star, for the given pixel.
+
+    :type lv_array:
+        :class:`~np.ndarray`
+
+    :param debug: [optional]
+        Re-raise captured exceptions.
+
+    :type debug:
+        bool
+
+    :returns:
+        The log-likelihood of the log scatter, given the fluxes and the label
+        vector array.
+
+    :raises np.linalg.linalg.LinAlgError:
+        If there was an error in inverting a matrix, and `debug` is set to True.
+    """
     
     scatter = np.exp(ln_scatter)
-
     try:
         # Calculate the coefficients for this level of scatter.
-        coefficients = _fit_coefficients(intensities, u_intensities, scatter,
+        coefficients = _fit_coefficients(fluxes, flux_uncertainties, scatter,
             lv_array)
 
     except np.linalg.linalg.LinAlgError:
@@ -440,10 +602,10 @@ def _pixel_scatter_ln_likelihood(ln_scatter, intensities, u_intensities,
         return -np.inf
 
     model = np.dot(coefficients, lv_array.T)
-    variance = u_intensities**2 + scatter**2
+    variance = flux_uncertainties**2 + scatter**2
 
-    return -0.5 * np.sum((intensities - model)**2 / variance) \
-        - 0.5 * np.sum(np.log(variance))
+    return -0.5 * np.sum((fluxes - model)**2 / variance) \
+        -0.5 * np.sum(np.log(variance))
 
 
 def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
