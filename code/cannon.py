@@ -12,7 +12,6 @@ import numpy as np
 import sys
 from itertools import chain
 from warnings import simplefilter
-from time import time #TODO remove
 
 import scipy.optimize as op
 from astropy.table import Table
@@ -156,7 +155,7 @@ class CannonModel(object):
         # Initialise the requisite arrays.
         N_stars, N_pixels = self._fluxes.shape[:2]
         scatter = np.nan * np.ones(N_pixels)
-        coefficients = np.nan * np.ones((N_pixels, lva.shape[1]))
+        coefficients = np.nan * np.ones((N_pixels, lva.shape[0]))
         
         # Display a progressbar unless requested otherwise.
         increment = int(N_pixels / 100)
@@ -589,23 +588,22 @@ def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
         bool
 
     :returns:
-        The label vector coefficients for the pixel.
+        The label vector coefficients for the pixel, the inverse variance matrix
+        and the total pixel variance.
     """
 
     variance = flux_uncertainties**2 + scatter**2
-    CiA = lv_array * np.tile(1./variance, (lv_array.shape[1], 1)).T
-    ATCiAinv = np.linalg.inv(np.dot(lv_array.T, CiA))
+    CiA = lv_array.T * np.tile(1./variance, (lv_array.shape[0], 1)).T
+    ATCiAinv = np.linalg.inv(np.dot(lv_array, CiA))
 
-    ATY = np.dot(lv_array.T, fluxes/variance)
+    ATY = np.dot(lv_array, fluxes/variance)
     coefficients = np.dot(ATCiAinv, ATY)
 
-    if full_output:
-        return (coefficients, ATCiAinv)
-    return coefficients
+    return (coefficients, ATCiAinv, variance)
+    
 
-
-def _pixel_scatter_nll(scatter, fluxes, flux_uncertainties,
-    lv_array, debug=False):
+def _pixel_scatter_nll(scatter, fluxes, flux_uncertainties, lv_array,
+    debug=False):
     """
     Return the negative log-likelihood for the scatter in a single pixel.
 
@@ -653,15 +651,14 @@ def _pixel_scatter_nll(scatter, fluxes, flux_uncertainties,
 
     try:
         # Calculate the coefficients for the given level of scatter.
-        coefficients \
-            = _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array)
+        coefficients, ATCiAinv, variance = _fit_coefficients(fluxes,
+            flux_uncertainties, scatter, lv_array)
 
     except np.linalg.linalg.LinAlgError:
         if debug: raise
         return -np.inf
 
-    model = np.dot(coefficients, lv_array.T)
-    variance = flux_uncertainties**2 + scatter**2
+    model = np.dot(coefficients, lv_array)
 
     return 0.5 * np.sum((fluxes - model)**2 / variance) \
         + 0.5 * np.sum(np.log(variance))
@@ -704,7 +701,7 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
     # Get an initial guess of the scatter.
     scatter = np.var(fluxes) - np.median(flux_uncertainties)**2
     scatter = np.sqrt(scatter) if scatter >= 0 else np.std(fluxes)
-
+    
     # Optimise the scatter, and at each scatter value we will calculate the
     # optimal vector coefficients.
     op_scatter = op.fmin_powell(_pixel_scatter_nll, scatter,
@@ -714,14 +711,14 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
     # Note that if we can't solve for the coefficients, we should just set them
     # as zero and send back a giant variance.
     try:
-        coefficients = _fit_coefficients(fluxes, flux_uncertainties, op_scatter,
-            lv_array)
+        coefficients, _, __ = _fit_coefficients(fluxes, flux_uncertainties,
+            op_scatter, lv_array)
 
     except np.linalg.linalg.LinAlgError:
         logger.exception("Failed to calculate coefficients")
         if debug: raise
 
-        return (np.zeros(lv_array.shape[1]), 10e8)
+        return (np.zeros(lv_array.shape[0]), 10e8)
 
     else:
         return (coefficients, op_scatter)
@@ -834,5 +831,5 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
     else:
         offsets = np.zeros(len(labels.colnames))
 
-    return (_build_label_vector_rows(label_vector, labels), indices, offsets)
+    return (_build_label_vector_rows(label_vector, labels).T, indices, offsets)
 
