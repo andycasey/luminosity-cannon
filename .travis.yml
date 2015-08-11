@@ -1,0 +1,18 @@
+language: python
+python:
+  - 2.7
+virtualenv:
+  system_site_packages: true
+before_install:
+  - sudo apt-get install python-matplotlib python-pyfits python-scipy
+  - "export DISPLAY=:99.0"
+  - "sh -e /etc/init.d/xvfb start"
+install:
+  - pip install astropy==1.0rc1 
+  - pip install coveralls 
+script:
+  - nosetests --with-coverage
+after_success:
+  coveralls
+notifications:
+  email: false
