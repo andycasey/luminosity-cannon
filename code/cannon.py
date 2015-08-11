@@ -1,28 +1,29 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" Cannon for stellar distances """
+""" Cannon for absolute stellar luminosities. """
 
-import bencode
+__author__ = "Andy Casey <arc@ast.cam.ac.uk>"
+
 import cPickle as pickle
 import hashlib
 import logging
 import numpy as np
 import sys
+from itertools import chain
 from warnings import simplefilter
 
 import scipy.optimize as op
 from astropy.table import Table
 
 
-# Set up logging.
-logging.basicConfig(level=logging.DEBUG, 
+# Set up logger.
+logging.basicConfig(level=logging.INFO, 
     format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("sick")
+logger = logging.getLogger("cannon")
 
 simplefilter("ignore", np.RankWarning)
 simplefilter("ignore", RuntimeWarning)
-
 
 
 class CannonModel(object):
@@ -185,89 +186,139 @@ class CannonModel(object):
         return (coefficients, scatter, offsets)
 
 
-    def solve_labels(self, flux, flux_uncertainties=None, **kwargs):
+    def _get_linear_indices(self, label_vector_description, full_output=False):
+        """
+        Return indices of linear labels in the given label vector description.
 
-        if flux_uncertainties is None:
-            variance = np.zeros_like(flux)
-        else:
-            variance = flux_uncertainties**2
+        :param label_vector_description:
+            The human-readable label vector description.
 
-        # Which parameters are actually in the Cannon model?
-        # (These are the ones we have to solve for.)
-        label_vector_indices = self._parse_label_vector_description(
-            self._label_vector_description, verbose=False)
-        indices = np.unique(np.hstack(
-            [[term[0] for term in vector_terms if term[1] != 0] \
-            for vector_terms in label_vector_indices]))
+        :type label_vector_description:
+            str
 
-        finite = np.isfinite(self._coefficients[:, 0] * flux * variance)
+        :param full_output: [optional]
+            Return the indices and the names of the corresponding linear labels.
+
+        :type full_output:
+            bool
+
+        :returns:
+            The indices of the linear terms in the label vector description. If
+            `full_output` is True, then the corresponding label names are also
+            provided. The indices are index-zeroed (i.e., there is no adjustment
+            for the zeroth term of a label vector array typically being '1').
+        """
+
+        lvi = self._parse_label_vector_description(label_vector_description,
+            verbose=False)
+
+        names = []
+        indices = []
+        for i, term in enumerate(lvi):
+            if len(term) == 1 and term[0][1] == 1:
+                names.append(term[0][0])
+                indices.append(i)
+        names, indices = tuple(names), np.array(indices)
+
+        if full_output:
+            return (indices, names)
+        return indices
+
+
+    def solve_labels(self, flux, flux_uncertainties, **kwargs):
+        """
+        Solve the labels for given fluxes (and uncertainties) using the trained
+        model.
+
+        :param fluxes:
+            The normalised fluxes. These should be on the same wavelength scale
+            as the trained data.
+
+        :type fluxes:
+            :class:`~np.array`
+
+        :param flux_uncertainties:
+            The 1-sigma uncertainties in the fluxes. This should have the same
+            shape as `fluxes`.
+
+        :type flux_uncertainties:
+            :class:`~np.array`
+
+        :returns:
+            The labels for the given fluxes as a dictionary.
+
+        :raises TypeError:
+            If the model is not trained.
+        """
+
+        if not self._trained:
+            raise TypeError("the model has not been trained!")
 
         # Get an initial estimate of those parameters from a simple inversion.
         # (This is very much incorrect for non-linear terms).
-        Cinv = 1.0 / (self._scatter[finite]**2 + variance[finite])
+        finite = np.isfinite(self._coefficients[:, 0]*flux *flux_uncertainties)
+        Cinv = 1.0 / (self._scatter[finite]**2 + flux_uncertainties[finite]**2)
         A = np.dot(self._coefficients[finite, :].T,
             Cinv[:, None] * self._coefficients[finite, :])
         B = np.dot(self._coefficients[finite, :].T,
             Cinv * flux[finite])
-        initial_vector_labels = np.linalg.solve(A, B)
-        
-        # p0 contains all coefficients, but we need only the linear terms for
-        # the initial estimate
-        _ = np.array([i for i, vector_terms \
-            in enumerate(label_vector_indices) if len(vector_terms) == 1 \
-            and vector_terms[0][1] == 1])
-        if len(_) == 0:
-            raise ValueError("no linear terms in Cannon model")
+        initial_vector_p0 = np.linalg.solve(A, B)
 
-        p0 = initial_vector_labels[1 + _]
+        # p0 contains all coefficients, but we only want the linear terms to
+        # make an initial estimate.
+        indices, names = self._get_linear_indices(self._label_vector_description,
+            full_output=True)
+        if len(indices) == 0:
+            raise NotImplementedError("no linear terms in Cannon model -- TODO")
 
+        # Get the initial guess of just the linear parameters.
+        # (Here we make a + 1 adjustment for the first '1' term)
+        p0 = initial_vector_p0[indices + 1]
 
-        label_vector_indices2 = self._parse_label_vector_description(
-            self._label_vector_description, verbose=False,
-            return_indices=True)
+        logger.debug("Initial guess: {0}".format(dict(zip(names, p0))))
 
-        # TODO HACKIEST SHIT EVER
-        translate = {}
-        vals = []
-        for each in label_vector_indices2:
-            for cv, o in each:
-                vals.append(cv)
-
-        vals = np.unique(np.sort(vals))
-        for i, v in enumerate(vals):
-            translate[v] = i
-
-        label_vector_indices3 = []
-        for each in label_vector_indices2:
-            foo = []
-            for cv, o in each:
-                foo.append((translate[cv], o))
-            label_vector_indices3.append(foo)
-
+        # Now we need to build up label vector rows by indexing relative to the
+        # labels that we will actually be solving for (in this case it's the
+        # variable 'names'), and not the labels as they are currently referenced
+        # in self._labels
+        label_vector_indices = self._parse_label_vector_description(
+            self._label_vector_description, return_indices=True,
+            __columns=names)
 
         # Create the function.
         def f(coefficients, *labels):
             return np.dot(coefficients, _build_label_vector_rows(
-                label_vector_indices3, labels).T).flatten()
+                label_vector_indices, labels).T).flatten()
 
         # Optimise the curve to solve for the parameters and covariance.
         full_output = kwargs.pop("full_output", False)
         kwds = kwargs.copy()
         kwds.setdefault("maxfev", 10000)
         labels, covariance = op.curve_fit(f, self._coefficients[finite],
-            flux[finite], p0=p0, sigma=1.0/np.sqrt(Cinv),
-            absolute_sigma=True, **kwds)
+            flux[finite], p0=p0, sigma=1.0/np.sqrt(Cinv), absolute_sigma=True,
+            **kwds)
 
-        # Since we might not have solved for every parameter, let's return a 
-        # dictionary. Don't forget to apply the offsets to the inferred labels.
-        labels = dict(zip(np.array(self._labels.colnames)[vals],
-            labels))
-        print("TODO: IGNORING OFFSETS")
+        # We might have solved for any number of parameters, so we return a
+        # dictionary.
+        logger.warn("TODO: apply offsets as required")
+        labels = dict(zip(names, labels))
+
+        logger.debug("Final solution: {0}".format(labels))
 
         if full_output:
             return (labels, covariance)
-
         return labels
+
+
+    def cross_validate(self, N=1, threads=1):
+        """
+        Perform cross-validation on the trained model.
+        """
+
+        if not self._trained:
+            raise TypeError("model must be trained before cross-validation")
+
+        raise NotImplementedError("soon...")
 
 
     def _check_forbidden_label_characters(self, characters):
@@ -320,27 +371,31 @@ class CannonModel(object):
         :returns:
             A list where each item contains indices and order information to
             represent the label vector description.
-
-            *** TODO INCLUDE EXAMPLE ***
         """
 
         if isinstance(label_vector_description, (str, unicode)):
             label_vector_description = label_vector_description.split()
 
+        # This allows us to parse arbitrary columns instead of referencing
+        # based on the self._labels. Use with caution! Note: if using this,
+        # always turn off verbosity.
+        columns = kwargs.pop("__columns", self._labels.colnames)
+
         # Functions to parse the parameter (or index) and order for each term.
         order = lambda t: int((t.split("^")[1].strip() + " ").split(" ")[0]) \
             if "^" in t else 1
 
-        param = lambda d: (d + "^").split("^")[0].strip()
         if return_indices:
-            param = lambda d: self._labels.colnames.index(param(d))
+            param = lambda d: columns.index((d + "^").split("^")[0].strip())
+        else:
+            param = lambda d: (d + "^").split("^")[0].strip()
 
         theta = []
         for description in label_vector_description:
 
             # Is it just a parameter?
             try:
-                index = self._labels.colnames.index(description.strip())
+                index = columns.index(description.strip())
 
             except ValueError:
 
@@ -371,7 +426,7 @@ class CannonModel(object):
             else:
                 theta.append([(param(description), order(description))])
 
-        if kwargs.pop("verbose", True):
+        if kwargs.pop("verbose", True) and not return_indices:
             logger.info("Training Cannon model using label vector description:"\
                 " {}".format(self._repr_label_vector_description(theta)))
 
@@ -398,8 +453,12 @@ class CannonModel(object):
                     sub_string.append("{0}^{1}".format(descr, order))
                 else:
                     sub_string.append(descr)
-            string.append(" * ".join(sub_string))
-        raise FORDOCCO
+
+            if len(sub_string) > 1:
+                string.append("({})".format(" * ".join(sub_string)))
+            else:
+                string.append(sub_string[0])
+
         return " + ".join(string)
 
 
@@ -593,9 +652,9 @@ def _pixel_scatter_ln_likelihood(ln_scatter, fluxes, flux_uncertainties,
     
     scatter = np.exp(ln_scatter)
     try:
-        # Calculate the coefficients for this level of scatter.
-        coefficients = _fit_coefficients(fluxes, flux_uncertainties, scatter,
-            lv_array)
+        # Calculate the coefficients for the given level of scatter.
+        coefficients \
+            = _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array)
 
     except np.linalg.linalg.LinAlgError:
         if debug: raise
