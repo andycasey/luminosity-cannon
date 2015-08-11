@@ -25,7 +25,7 @@ simplefilter("ignore", RuntimeWarning)
 
 class CannonModel(object):
 
-    def __init__(self, labels, fluxes, flux_uncertainties):
+    def __init__(self, labels, fluxes, flux_uncertainties, verify=True):
         """
         Initialise a Cannon model.
 
@@ -33,22 +33,22 @@ class CannonModel(object):
             A table with columns as labels, and stars as rows.
 
         :type labels:
-            astropy table.
+            :class:`~astropy.table.Table`
 
         :param fluxes:
             An array of fluxes for each star as shape (num_stars, num_pixels).
             The num_stars should match the rows in `labels`.
 
         :type fluxes:
-            np.ndarray
+            :class:`np.ndarray`
 
         :param flux_uncertainties:
             An array of 1-sigma flux uncertainties for each star as shape
             (num_stars, num_pixels). The shape of the `flux_uncertainties` array
-            should match the `flux` array. 
+            should match the `fluxes` array. 
 
         :type flux_uncertainties:
-            np.ndarray
+            :class:`np.ndarray`
         """
 
         fluxes = np.atleast_2d(fluxes)
@@ -63,18 +63,18 @@ class CannonModel(object):
                 " the same shape")
 
         if len(labels) == 0:
-            raise ValueError("no stars given")
+            raise ValueError("no stars (labels) given")
 
+        self._trained = False
         self._labels = labels
         self._fluxes = fluxes
         self._flux_uncertainties = flux_uncertainties
-        self._trained = False
         self._label_vector_description = None
 
-        print("TODO: Check for forbidden characters in label names")
+        if verify:
+            self._check_forbidden_label_characters("^*")
 
         return None
-
 
 
 
@@ -84,7 +84,7 @@ class CannonModel(object):
 
         # Save and interpret the label vector description.
         self._label_vector_description = label_vector_description
-        lv = self._interpret_label_vector_description(label_vector_description)
+        lv = self._parse_label_vector_description(label_vector_description)
 
         # Build the label vector array.
         lva, star_indices, offsets = _build_label_vector_array(
@@ -94,8 +94,7 @@ class CannonModel(object):
         N_stars, N_pixels = self._fluxes.shape[:2]
         scatter = np.nan * np.ones(N_pixels)
         coefficients = np.nan * np.ones((N_pixels, lva.shape[1]))
-        #coefficients = np.memmap("tmp", dtype=float, mode="w+", shape=(N_pixels, lva.shape[1]))
-
+        
         increment = int(N_pixels / 100)
         progressbar = kwargs.pop("__progressbar", True)
         if progressbar:
@@ -133,7 +132,7 @@ class CannonModel(object):
 
         # Which parameters are actually in the Cannon model?
         # (These are the ones we have to solve for.)
-        label_vector_indices = self._interpret_label_vector_description(
+        label_vector_indices = self._parse_label_vector_description(
             self._label_vector_description, verbose=False)
         indices = np.unique(np.hstack(
             [[term[0] for term in vector_terms if term[1] != 0] \
@@ -161,7 +160,7 @@ class CannonModel(object):
         p0 = initial_vector_labels[1 + _]
 
 
-        label_vector_indices2 = self._interpret_label_vector_description(
+        label_vector_indices2 = self._parse_label_vector_description(
             self._label_vector_description, verbose=False,
             return_indices=True)
 
@@ -209,22 +208,70 @@ class CannonModel(object):
         return labels
 
 
+    def _check_forbidden_label_characters(self, characters):
+        """
+        Check the label table for potentially forbidden characters.
+
+        :param characters:
+            A string of forbidden characters.
+
+        :type characters:
+            str
+
+        :returns:
+            True
+
+        :raises ValueError:
+            If a forbidden character is in a potential label name.
+        """
+
+        for column in self._labels.dtype.names:
+            for character in characters:
+                if character in column:
+                    raise ValueError("forbidden character '{0}' is in potential"
+                        " label '{1}' - to ignore this use verify=False".format(
+                            character, column))
+        return True
 
 
-    def _interpret_label_vector_description(self, label_vector_description,
-        verbose=True, return_indices=False):
+    def _parse_label_vector_description(self, label_vector_description,
+        return_indices=False, **kwargs):
+        """
+        Parse a human-readable label vector description into indices (that refer
+        back to the labels table) and orders for all of the cross-terms.
+        
+        :param label_vector_description:
+            The human-reable label vector description. These labels are expected
+            to be columns in the labels table that was supplied when the class
+            was initialised.
+
+        :type label_vector_description:
+            str
+
+        :param return_indices: [optional]
+            Return the indices corresponding to the label table instead of the
+            actual parameter name itself.
+
+        :type return_indices:
+            bool
+
+        :returns:
+            A list where each item contains indices and order information to
+            represent the label vector description.
+
+            *** TODO INCLUDE EXAMPLE ***
+        """
 
         if isinstance(label_vector_description, (str, unicode)):
             label_vector_description = label_vector_description.split()
 
+        # Functions to parse the parameter (or index) and order for each term.
         order = lambda t: int((t.split("^")[1].strip() + " ").split(" ")[0]) \
             if "^" in t else 1
 
+        param = lambda d: (d + "^").split("^")[0].strip()
         if return_indices:
-            repr_param = lambda d: \
-                self._labels.colnames.index((d + "^").split("^")[0].strip())
-        else:
-            repr_param = lambda d: (d + "^").split("^")[0].strip()
+            param = lambda d: self._labels.colnames.index(param(d))
 
         theta = []
         for description in label_vector_description:
@@ -234,22 +281,25 @@ class CannonModel(object):
                 index = self._labels.colnames.index(description.strip())
 
             except ValueError:
+
+                # Either the description is not a column in the labels table, or
+                # this is a cross-term.
+
                 if "*" in description:
-                    # Split by * to evaluate cross-terms.
                     cross_terms = []
-                    for cross_term in description.split("*"):
+                    for ct in description.split("*"):
                         try:
-                            index = repr_param(cross_term)
+                            index = param(ct)
                         except ValueError:
                             raise ValueError("couldn't interpret '{0}' in the "\
                                 "label '{1}' as a parameter coefficient".format(
-                                    *map(str.strip, (cross_term, description))))
-                        cross_terms.append((repr_param(cross_term), order(cross_term)))
+                                    *map(str.strip, (ct, description))))
+                        cross_terms.append((param(ct), order(ct)))
                     theta.append(cross_terms)
 
                 elif "^" in description:
                     theta.append([(
-                        repr_param(description),
+                        param(description),
                         order(description)
                     )])
 
@@ -257,16 +307,26 @@ class CannonModel(object):
                     raise ValueError("could not interpret '{0}' as a parameter"\
                         " coefficient description".format(description))
             else:
-                theta.append([(repr_param(description), order(description))])
+                theta.append([(param(description), order(description))])
 
-        if verbose:
-            logger.info("Training the Cannon model using the following description "
-                "of the label vector: {0}".format(self._repr_label_vector_description(theta)))
+        if kwargs.pop("verbose", True):
+            logger.info("Training Cannon model using label vector description:"\
+                " {}".format(self._repr_label_vector_description(theta)))
 
         return theta
 
 
     def _repr_label_vector_description(self, label_vector_indices):
+        """
+        Represent label vector indices as a readable label vector description.
+
+        :param label_vector_indices:
+            A list of label vector indices. Each item in the list is expected to
+            be a tuple of cross-terms (each in a list).
+
+        :returns:
+            A human-readable string of the label vector description.
+        """
 
         string = ["1"]
         for cross_terms in label_vector_indices:
@@ -277,32 +337,73 @@ class CannonModel(object):
                 else:
                     sub_string.append(descr)
             string.append(" * ".join(sub_string))
+        raise FORDOCCO
         return " + ".join(string)
 
 
+    def save(self, filename, overwrite=False):
+        """
+        Save the (trained) model to disk. This will save the label vector
+        description, the optimised coefficients and scatter, and pivot offsets.
 
+        :param filename:
+            The file path where to save the model to.
 
+        :type filename:
+            str
 
+        :param overwrite: [optional]
+            Overwrite the existing file path, if it already exists.
 
-    def save(self, filename):
+        :type overwrite:
+            bool
 
-        assert self._trained
-        # Save the label vector description, coefficients, etc
+        :returns:
+            True
+
+        :raise TypeError:
+            If the model has not been trained, since there is nothing to save.
+        """
+
+        if not self._trained:
+            raise TypeError("the model has not been trained; there is nothing "
+                "to save")
+
+        contents = \
+            (self._label_vector_description, self._coefficients, self._scatter,
+                self._offsets)
         with open(filename, "w") as fp:
-            pickle.dump((self._label_vector_description, self._coefficients,
-                self._scatter, self._offsets), fp, -1)
+            pickle.dump(contents, fp, -1)
 
         return True
 
 
     def load(self, filename):
-        # Load the label vector description, coefficients, etc
-        with open(filename, "r") as fp:
-            self._label_vector_description, self._coefficients, self._scatter, \
-                self._offsets = pickle.load(fp)
+        """
+        Load a trained model from disk.
 
+        :param filename:
+            The file path where to load the model from.
+
+        :type filename:
+            str
+
+        :returns:
+            True
+
+        :raises IOError:
+            If the model could not be loaded.
+        """
+
+        with open(filename, "r") as fp:
+            contents = pickle.load(fp)
+
+        self._label_vector_description, self._coefficients, self._scatter, \
+            self._offsets = contents
         self._trained = True
+
         return True
+
 
 
 
@@ -420,181 +521,3 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
 
     return (_build_label_vector_rows(label_vector, labels), indices, offsets)
 
-
-
-
-
-
-
-
-if __name__ == "__main__":
-
-    with open("hipparcos-spectra.pkl", "rb") as fp:
-        stars = pickle.load(fp)
-
-    data = np.memmap("hipparcos-spectra.memmap", mode="r", dtype=float)
-    data = data.reshape(len(stars) + 1, -1, 2)
-
-
-    N_px, sample_rate = None, 10
-
-    wavelengths = data[0, ::sample_rate, 0]
-    fluxes = data[1:, ::sample_rate, ::2].reshape(len(stars), -1)
-    flux_uncertainties = data[1:, ::sample_rate, 1::2].reshape(len(stars), -1)
-
-    """
-    import matplotlib.pyplot as plt
-    for i, star in enumerate(stars):
-        print("plotting {}".format(star))
-
-        fig, ax = plt.subplots(1)
-        ax.plot(wavelengths, fluxes[i], c='k')
-        ax.fill_between(wavelengths,
-            fluxes[i] - flux_uncertainties[i],
-            fluxes[i] + flux_uncertainties[i],
-            facecolor="#666666", edgecolor="#666666", zorder=-1)
-
-	ax.set_ylim(0, 1.2)
-        ax.set_title(star)
-        fig.tight_layout()
-
-        #fig.savefig("figures/{}.png".format(star))
-        plt.close("all")
-    """
-
-    #fluxes = fluxes[:, ok].reshape(len(stars), -1)[:, :N_px]
-    #flux_uncertainties = flux_uncertainties[:, ok].reshape(len(stars), -1)[:, :N_px]
-
-    labels = Table.read("master_table_hip_harps.dat", format="ascii")
-    labels = Table.read("table.dat", format="ascii")
-    # Ensure the labels are sorted the same as the stars
-    sort_indices = np.array([np.where(labels["Star"] == star)[0] for star in stars])
-    labels = labels[sort_indices]
-
-    quality = ((labels["qual2mass"] == "AAA") * (labels["n(in1arcmin)"] == 1)).flatten()
-    #quality = ((labels["sourceVmag"] == "G") * (labels["n(in1arcmin)"] == 1)).flatten()
-    #quality = np.ones(len(labels), dtype=bool)
-
-
-    model = CannonModel(labels[quality], fluxes[quality, :],
-        flux_uncertainties[quality, :])
-
-
-    #model.train("""K2mass_absolute^3 K2mass_absolute^2 K2mass_absolute 
-    #    JmK^3 JmK^2 JmK JmK^2*K2mass_absolute JmK*K2mass_absolute^2 
-    #    JmK*K2mass_absolute""".split())
-    #model.save("jk-qual")
-
-    model.load("jk-qual")
-
-    #model.load("tmp")
-
-    #model.train("""V_absolute^3 V_absolute^2 V_absolute 
-    #    b-v^3 b-v^2 b-v b-v^2*V_absolute b-v*V_absolute^2 
-    #    b-v*V_absolute""".split())
-    #model.save("tmp-no-qual")
-
-
-
-    inferred_labels = []
-    for i, (label, flux, flux_uncertainty) \
-    in enumerate(zip(labels[quality], fluxes[quality, :], flux_uncertainties[quality, :])):
-
-
-        inferred = model.solve_labels(flux, flux_uncertainty)
-
-        row_data = {
-            "expected_JmK": label["JmK"],
-            "expected_distance": 1./label["plx"],
-            "expected_distance_err": 1./label["e_plx"],
-            "expected_K2mass": label["K2mass"],
-            "expected_K2mass_absolute":  label["K2mass_absolute"],
-            "expected_bmv": label["b-v"],
-            "expected_V_absolute": label["V_absolute"],
-        }
-        for k, v in inferred.items():
-            row_data["inferred_{}".format(k)] = v
-
-        # mu = apparent - absolute = 5 * log_10(d) - 5
-        # mu/5 = log_10(d) - 1
-        # d = 10**(mu/5 + 1)
-        mu = label["K2mass"] - inferred["K2mass_absolute"]
-        row_data["inferred_distance"] = 10**(mu/5. + 1)
-        #mu = label["vmag"] - inferred["V_absolute"]
-        #row_data["inferred_distance_V"] = 10**(mu/5. + 1)
-
-        inferred_labels.append(row_data)
-
-        print("Done {}".format(i))
-
-    foo = Table(rows=inferred_labels)
-
-
-    #dist = "inferred_distance_V"
-    dist = "inferred_distance"
-
-
-    fig, ax = plt.subplots()
-
-    #ax.errorbar(1000*foo["expected_distance"].flatten(), 1000*foo["inferred_distance"].flatten(),
-    #    xerr=foo["expected_distance_err"].flatten() * 1000, fmt=None, ecolor="k")
-
-    ax.scatter(1000*foo["expected_distance"].flatten(), 1000*foo[dist].flatten(),
-        facecolor="k")
-
-    #ax.set_xlim(0, 1500)
-    #ax.set_ylim(0, 1500)
-    lim = max([ax.get_xlim()[1], ax.get_ylim()[1]])
-    ax.plot([0, lim], [0, lim], ":", c="#666666", zorder=-1)
-    ax.set_xlim(0, lim)
-    ax.set_ylim(0, lim)
-
-    ax.set_xlabel("Hipparcos")
-    ax.set_ylabel("Inferred")
-
-    #fig.savefig("distances-qual.png")
-
-
-    a = "expected_JmK"
-    b_exp = "expected_K2mass"
-    b_exp_abs = "expected_K2mass_absolute"
-
-
-    #a = "expected_bmv"
-    #b_exp = "expected_vmag"
-    #b_exp_abs = "expected_V_absolute"
-
-
-    difference = 1000 * (foo[dist] - foo["expected_distance"])
-    fig, ax = plt.subplots(1, 3)
-
-    ax[0].scatter(foo[a], difference, facecolor="k")
-    ax[0].set_xlabel(a)
-    ax[0].set_ylabel("Distance difference")
-
-    ax[1].scatter(foo[b_exp], difference, facecolor="k")
-    ax[1].set_xlabel(b_exp)
-
-    ax[2].scatter(foo[b_exp_abs], difference, facecolor="k")
-    ax[2].set_xlabel(b_exp_abs)
-
-    #fig.savefig("differences-qual.png")
-
-
-    fig, ax = plt.subplots(1, 2)
-    ax[0].scatter(foo["inferred_JmK"].flatten() - foo[a].flatten(), difference,
-        facecolor="k")
-
-    ax[0].set_xlabel("difference in JmK")
-    ax[0].set_ylabel("difference in distance")
-
-    ax[1].scatter(foo["inferred_JmK"].flatten() - foo[a].flatten(),
-        difference/foo["expected_distance"],
-        facecolor="k")
-
-    ax[1].set_xlabel("difference in JmK")
-    ax[1].set_ylabel("difference in distance [%]")
-
-    #fig.savefig("differences-jmk-qual.png")
-
-    raise a
