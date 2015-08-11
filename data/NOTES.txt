@@ -1,0 +1,19 @@
+Cross-matched to Hipparcos (2007) catalog:
+ - 18 in GES iDR3 (BMs and NGC 2547)
+ - 3,244 in APOGEE (v603): 733 with stellar parameters, 2,511 without
+ - 408 in LAMOST DR1 (all have stellar parameters) -- there may be more with spectra but no stellar parameters, since this is just ~50% of the LAMOST data set.
+ - 45 in first ~127,000 GALAH spectra:
+
+With globular cluster stars (and distance modulus):
+ - 5,251 stars in GES iDR3 (all with stellar parameters) in 17 clusters (unique FIELDNAMEs starting with "NGC"). 1,997 of them are dwarfs (logg > 3.8).
+ - Probably a LOT in LAMOST, but difficult to immediately estimate how many.
+ - Not so many GCs in GALAH (~5-10)
+
+Other notes:
+- 309 stars in common between APOGEE (v603) and GES iDR3
+
+How many <SURVEY> stars in Tycho 2 catalog that are not in Hipparcos? [e.g., which is the best to do a prediction paper for? -- probably GALAH]
+ - APOGEE:
+ - GES:
+ - GALAH:
+ - LAMOST:
