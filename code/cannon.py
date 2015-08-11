@@ -9,8 +9,10 @@ import cPickle as pickle
 import hashlib
 import logging
 import numpy as np
+import random
 import sys
-from itertools import chain
+from itertools import chain, combinations
+from math import factorial
 from warnings import simplefilter
 
 import scipy.optimize as op
@@ -310,10 +312,97 @@ class CannonModel(object):
         return labels
 
 
-    def cross_validate(self, N=1, threads=1):
+    def cross_validate(self, label_vector_description, N=1, N_combinations=1000,
+        **kwargs):
         """
         Perform cross-validation on the trained model.
+
+        :params label_vector_description:
+            The human-readable form of the label vector description.
+
+        :type label_vector_description:
+            str
+
+        :param N: [optional]
+            The number of stars (rows) to use in the testing dataset.
+
+        :type N:
+            int
+
+        :param N_combinations: [optional]
+            The maximum number of cross-validation combinations to run. If None
+            or -1 is given then all possible combinations based on `N` will be
+            run. Note that for `N > 1`, this can result in a very large number
+            of combinations.
+
+        :type N_combinations:
+            int
         """
+
+        R = len(self._labels)
+        M = range(R)
+        if N_combinations in (None, -1):
+            N_combinations = factorial(N) / factorial(R) / factorial(N - R)
+
+        # Shake it all about.
+        random.shuffle(M)
+
+        # Initialise arrays.
+        label_indices, label_names = self._get_linear_indices(
+            label_vector_description, full_output=True)
+
+        inferred_test_labels = np.empty((N_combinations, N, len(label_names)))
+        expected_test_labels = np.empty((N_combinations, N, len(label_names)))
+        testing_set_indices = np.empty((N_combinations, N))
+
+        # Go through each combination.
+        for i, indices in enumerate(combinations(M, N)):
+            if i >= N_combinations:
+                break
+
+            indices = np.array(indices)
+            train = np.ones(len(self._labels), dtype=bool)
+            train[indices] = False
+
+            # Create a model to use so we don't overwrite self.
+            model = self.__class__(self._labels[train], self._fluxes[train, :],
+                self._flux_uncertainties[train, :])
+            model.train(label_vector_description, **kwargs)
+
+            # Now solve for the testing set.
+            results = []
+            for j, (all_labels, fluxes, flux_uncertainties) \
+            in enumerate(zip(self._labels[~train], self._fluxes[~train, :],
+                self._flux_uncertainties[~train, :])):
+
+                inferred_labels = model.solve_labels(fluxes, flux_uncertainties)
+
+                # Save the results.
+                for k, name in enumerate(label_names):
+                    expected_test_labels[i, j, k] = all_labels[name]
+                    inferred_test_labels[i, j, k] = inferred_labels[name]
+
+            # Save the indices.
+            testing_set_indices[i, :] = indices
+
+        # [TODO] Need to shuffle the combinations some how.
+        # [TODO] Thread everything.
+        # [TODO] Make it fail-safe against falling over on a single permutation.
+        # [TODO] Safeguard against dumb input.
+        raise a
+
+
+        # Create a model that we will use so we don't overwrite self.
+
+
+        # For each combination:
+        # - train the model without the test set.
+        # - Solve for labels on the test set
+        # - Keep the (training set indices, expected results, solved results)
+
+        # Return everything separately:
+
+
 
         if not self._trained:
             raise TypeError("model must be trained before cross-validation")
