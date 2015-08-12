@@ -5,4 +5,4 @@ APOGEE / Hipparcos
 
 2. `cd` to the `data/` directory and run `get_apogee_spectra.py` to download the corresponding `apStar-*` spectra.
 
-
+3. Use `model_search.py` to evaluate different models 
