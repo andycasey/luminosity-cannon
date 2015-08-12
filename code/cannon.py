@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" Cannon for absolute stellar luminosities. """
+""" The Cannon for absolute stellar luminosities. """
 
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import cPickle as pickle
-import hashlib
 import logging
 import numpy as np
 import random
@@ -19,13 +18,15 @@ import scipy.optimize as op
 from astropy.table import Table
 
 
-# Set up logger.
+# Speak up.
 logging.basicConfig(level=logging.INFO, 
     format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("cannon")
 
+# Shut up.
 simplefilter("ignore", np.RankWarning)
 simplefilter("ignore", RuntimeWarning)
+
 
 def requires_training_wheels(f):
     """
@@ -1033,8 +1034,11 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
 
     lva = _build_label_vector_rows(label_vector, labels).T
     if ignore_non_finites:
-        use = np.all(np.isfinite(lva), axis=0)
-        lva, indices = lva[:, use], indices[use]
+        finite = np.all(np.isfinite(lva), axis=0)
+        lva, indices = lva[:, finite], indices[finite]
+
+    elif not np.all(np.isfinite(lva)):
+        logger.warn("Non-finite labels identified in the label vector array!")
 
     use = np.zeros(len(labels), dtype=bool)
     use[indices] = True
