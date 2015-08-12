@@ -1,14 +1,20 @@
 \documentclass[useAMS,usenatbib]{mn2e}
 
 
-\title[Inferring absolute stellar luminosities]{A probabilistic model for inferring absolute stellar luminosities from spectra}
+\title[Inferring absolute stellar luminosities]{A probabilistic model for 
+    inferring absolute stellar luminosities from spectra}
 % Some arrangement of the following authors:
-\author[Casey et al.]{A.~R.~Casey$^1$, M.~Ness$^2$, P.~Jofr\'e$^1$, D.~W.~Hogg$^{2,3,4}$, T.~M\"adler$^1$, G.~Gilmore$^1$, H.~W.~Rix$^2$, \newauthor
-A.~Ho$^2$, K.~Hawkins$^1$ \\ 
-$^1$Institute of Astronomy, University of Cambridge, Madingley Road, Cambridge CB3 0HA, UK\\
-$^2$Max-Planck-Institut f\"ur Astronomie, K\"onigstuhl 17, D-69117 Heidelberg, Germany\\
-$^3$Center for Cosmology and Particle Physics, Department of Physics, New York University, 4 Washington Pl., room 424, New York, NY, 10003, USA\\
-$^4$Center for Data Science, New York University, 726 Broadway, 7th Floor, New York, NY 10003, USA}
+\author[Casey et al.]{A.~R.~Casey$^1$, M.~Ness$^2$, P.~Jofr\'e$^1$, 
+    D.~W.~Hogg$^{2,3,4}$, T.~M\"adler$^1$, G.~Gilmore$^1$, 
+    H.~W.~Rix$^2$, \newauthor A.~Ho$^2$, K.~Hawkins$^1$ \\ 
+$^1$Institute of Astronomy, University of Cambridge, Madingley Road, Cambridge
+    CB3 0HA, UK\\
+$^2$Max-Planck-Institut f\"ur Astronomie, K\"onigstuhl 17, D-69117 Heidelberg,
+    Germany\\
+$^3$Center for Cosmology and Particle Physics, Department of Physics, New York
+    University, 4 Washington Pl., room 424, New York, NY, 10003, USA\\
+$^4$Center for Data Science, New York University, 726 Broadway, 7th Floor,
+    New York, NY 10003, USA}
 \begin{document}
 
 \date{Accepted 2015 XX XX. Received 2015 October XX; in original form 2015 XX xx}
@@ -20,7 +26,28 @@ $^4$Center for Data Science, New York University, 726 Broadway, 7th Floor, New Y
 \label{firstpage}
 
 \begin{abstract}
-Measuring stellar distances is a fundamental challenge in astronomy. Although \textit{Gaia} is expected to revolutionise modern astrophysics, most of the $>15$ million stellar spectra to be obtained from wide-field surveys in the coming decade will not have \textit{Gaia} parallaxes. Indeed, parallaxes cannot be reliably determined for $\sim$99\% of the stars in the Milky Way. Therefore any scientific inferences that rely on knowing the positions of more than 1\% of Milky Way stars will continue to be limited by our inability to accurately measure stellar distances. `\textit{Stellar twins}' offer a novel approach to determining stellar distances: by identifying two stars with indistinguishable spectra, where one has a \textit{Hipparcos} trigonometric parallax, the distance to the secondary star is calculable from the difference in perceived brightnesses. Crucially, unlike other methods to determine stellar distances, the distance precision does not degrade with increasing distance. Here we extend this idea with a probabilistic model to infer (amongst other quantities) absolute stellar luminosities directly from noisy spectra. Using FGK giant spectra from the APOGEE Survey and the ESO public archive, we show that distances can be reliably determined from ground-based apparent magnitudes and noisy spectra with an accuracy of XX pc, YY pc and ZZ pc for F, G and K-type giants, the most populous Galactic stellar tracers. We employ our probabilistic model to \textit{predict Gaia DR2 parallaxes} for XX FGK stars, and pledge to publicly announce a comparison once \textit{Gaia} parallaxes are made available, no matter what the result.
+Measuring stellar distances is a fundamental challenge in astronomy. Although 
+\textit{Gaia} is expected to revolutionise modern astrophysics, most of the 
+$>$15 million stellar spectra to be obtained from wide-field surveys in the 
+coming decade will not have \textit{Gaia} parallaxes. Indeed, parallaxes cannot 
+be reliably determined for $\sim$99\% of the stars in the Milky Way. Therefore 
+any scientific inferences that rely on knowing the positions of more than 1\% of 
+Milky Way stars will continue to be limited by our inability to accurately 
+measure stellar distances. `\textit{Stellar twins}' offer a novel approach to 
+determining stellar distances: by identifying two stars with indistinguishable 
+spectra, where one has a \textit{Hipparcos} trigonometric parallax, the distance
+ to the secondary star is calculable from the difference in perceived 
+ brightnesses. Crucially, unlike other methods to determine stellar distances, 
+the distance precision does not degrade with increasing distance. Here we extend
+ this idea with a probabilistic model to infer (amongst other quantities) 
+absolute stellar luminosities directly from noisy spectra. Using FGK giant 
+spectra from the APOGEE Survey and the ESO public archive, we show that 
+distances can be reliably determined from ground-based apparent magnitudes and 
+noisy spectra with an accuracy of XX pc, YY pc and ZZ pc for F, G and K-type 
+giants, the most populous Galactic stellar tracers. We employ our probabilistic 
+model to \textit{predict Gaia DR2 parallaxes} for XX FGK stars, and pledge to 
+publicly announce a comparison once \textit{Gaia} parallaxes are made available,
+ no matter what the result.
 \end{abstract}
 
 \begin{keywords}
