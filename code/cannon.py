@@ -315,7 +315,7 @@ class CannonModel(object):
 
         # We might have solved for any number of parameters, so we return a
         # dictionary.
-        logger.warn("TODO: apply offsets as required")
+        logger.debug("TODO: apply offsets as required")
         labels = dict(zip(names, labels))
 
         logger.debug("Final solution: {0}".format(labels))
