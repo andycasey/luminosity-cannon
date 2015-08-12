@@ -27,6 +27,16 @@ logger = logging.getLogger("cannon")
 simplefilter("ignore", np.RankWarning)
 simplefilter("ignore", RuntimeWarning)
 
+def requires_training_wheels(f):
+    """
+    A decorator for CannonModel functions where the model needs training first.
+    """
+    def wrapper(model, *args):
+        if not model._trained:
+            raise TypeError("the model needs training first")
+        return f(model, *args)
+    return wrapper
+
 
 class CannonModel(object):
 
@@ -66,19 +76,6 @@ class CannonModel(object):
         if verify:
             self._check_forbidden_label_characters("^*")
         return None
-
-
-    @property
-    def _trained_hash(self):
-        """
-        Return a hash of the trained state.
-        """
-
-        if not self._trained:
-            return None
-        args = (self._coefficients, self._scatter, self._offsets,
-            self._label_vector_description)
-        return "".join([str(hash(str(each)))[:10] for each in args])
 
 
     def _check_data(self, labels, fluxes, flux_uncertainties):
@@ -164,7 +161,7 @@ class CannonModel(object):
         
         # Build the label vector array.
         lv = self._parse_label_vector_description(label_vector_description)
-        lva, star_indices, offsets = _build_label_vector_array(self._labels, lv,
+        lva, use, offsets = _build_label_vector_array(self._labels, lv,
             N, limits, pivot)
 
         # Initialise the requisite arrays.
@@ -189,7 +186,11 @@ class CannonModel(object):
                 sys.stdout.flush()
 
             coefficients[i, :], scatter[i] = _fit_pixel(
-                self._fluxes[:, i], self._flux_uncertainties[:, i], lva)
+                self._fluxes[use, i], self._flux_uncertainties[use, i], lva,
+                **kwargs)
+
+            if not np.any(np.isfinite(scatter[i] * coefficients[i, :])):
+                logger.warn("No finite coefficients at pixel {}!".format(i))
 
         if progressbar:
             sys.stdout.write("\r\n")
@@ -199,6 +200,18 @@ class CannonModel(object):
             = coefficients, scatter, offsets, True
 
         return (coefficients, scatter, offsets)
+
+
+    @property
+    def _trained_hash(self):
+        """
+        Return a hash of the trained state.
+        """
+
+        if not self._trained: return None
+        args = (self._coefficients, self._scatter, self._offsets,
+            self._label_vector_description)
+        return "".join([str(hash(str(each)))[:10] for each in args])
 
 
     def _get_linear_indices(self, label_vector_description, full_output=False):
@@ -240,6 +253,53 @@ class CannonModel(object):
         return indices
 
 
+    @requires_training_wheels
+    def predict(self, labels=None, **labels_as_kwargs):
+        """
+        Predict spectra from the trained model, given the labels.
+
+        :param labels:
+            The labels required for the trained model. This should be a N-length
+            list matching the number of unique terms in the model, in the order
+            given by the `self._get_linear_indices` function. Alternatively,
+            labels can be explicitly given as keyword arguments.
+
+        :type labels:
+            list
+
+        :returns:
+            Model spectra for the given labels.
+
+        :raises TypeError:
+            If the model is not trained.
+        """
+
+        try:
+            labels[0]
+        except (TypeError, IndexError):
+            labels = [labels]
+
+        indices, names = self._get_linear_indices(
+            self._label_vector_description, full_output=True)
+        if labels is None:
+            # Must be given as keyword arguments.
+            labels = [labels_as_kwargs[name] for name in names]
+
+        else:
+            if len(labels) != len(names):
+                raise ValueError("expected number of labels is {0}, and {1} "
+                    "were given: {2}".format(len(names), len(labels),
+                        ", ".join(names)))
+
+        label_vector_indices = self._parse_label_vector_description(
+            self._label_vector_description, return_indices=True,
+            __columns=names)
+
+        return np.dot(self._coefficients, _build_label_vector_rows(
+            label_vector_indices, labels).T).flatten()
+
+
+    @requires_training_wheels
     def solve_labels(self, flux, flux_uncertainties, **kwargs):
         """
         Solve the labels for given fluxes (and uncertainties) using the trained
@@ -265,9 +325,6 @@ class CannonModel(object):
         :raises TypeError:
             If the model is not trained.
         """
-
-        if not self._trained:
-            raise TypeError("the model has not been trained!")
 
         # Get an initial estimate of those parameters from a simple inversion.
         # (This is very much incorrect for non-linear terms).
@@ -326,7 +383,8 @@ class CannonModel(object):
 
 
     @property
-    def residuals(self):
+    @requires_training_wheels
+    def label_residuals(self):
         """
         Calculate the residuals of the inferred labels using the trained model.
 
@@ -337,9 +395,6 @@ class CannonModel(object):
         :raises TypeError:
             If the model is not trained.
         """
-
-        if not self._trained:
-            raise TypeError("model must be trained first")
 
         try:
             if self._residuals_hash == self._trained_hash \
@@ -367,6 +422,7 @@ class CannonModel(object):
         return self._residuals_cache
 
 
+    @requires_training_wheels
     def cross_validate(self, label_vector_description, N=1, max_combinations=1000,
         **kwargs):
         """
@@ -456,11 +512,6 @@ class CannonModel(object):
         # - Keep the (training set indices, expected results, solved results)
 
         # Return everything separately:
-
-
-
-        if not self._trained:
-            raise TypeError("model must be trained before cross-validation")
 
         raise NotImplementedError("soon...")
 
@@ -606,6 +657,7 @@ class CannonModel(object):
         return " + ".join(string)
 
 
+    @requires_training_wheels
     def save(self, filename, overwrite=False, verify=True):
         """
         Save the (trained) model to disk. This will save the label vector
@@ -629,10 +681,6 @@ class CannonModel(object):
         :raise TypeError:
             If the model has not been trained, since there is nothing to save.
         """
-
-        if not self._trained:
-            raise TypeError("the model has not been trained; there is nothing "
-                "to save")
 
         # Create a hash of the labels, fluxes and flux uncertainties.
         if verify:
@@ -789,9 +837,9 @@ def _pixel_scatter_nll(scatter, fluxes, flux_uncertainties, lv_array,
     :raises np.linalg.linalg.LinAlgError:
         If there was an error in inverting a matrix, and `debug` is set to True.
     """
-    
+
     if 0 > scatter:
-        return -np.inf
+        return np.inf
 
     try:
         # Calculate the coefficients for the given level of scatter.
@@ -800,7 +848,7 @@ def _pixel_scatter_nll(scatter, fluxes, flux_uncertainties, lv_array,
 
     except np.linalg.linalg.LinAlgError:
         if debug: raise
-        return -np.inf
+        return np.inf
 
     model = np.dot(coefficients, lv_array)
 
@@ -912,7 +960,7 @@ def _build_label_vector_rows(label_vector, labels):
 
 
 def _build_label_vector_array(labels, label_vector, N=None, limits=None,
-    pivot=True):
+    pivot=True, ignore_non_finites=True):
     """
     Build the label vector array.
 
@@ -949,10 +997,18 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
     :type pivot:
         bool
 
+    :param ignore_non_finites: [optional]
+        Ignore rows with non-finite labels.
+
+    :type ignore_non_finites:
+        bool
+
     :returns:
-        A three-length tuple containing the label vector array, the indices of
-        stars (rows) from `labels` that were used (in case `N` and/or `limits`
-        were provided) and the coefficient offsets (for when `pivot` is True).
+        A three-length tuple containing the label vector array, a boolean array
+        of which stars (rows) from `labels` that were used (in case `N` and/or
+        `limits` were provided, or there were non-finite labels and
+        `ignore_non_finites` is set to True) and the coefficient offsets
+        (for when `pivot` is True).
     """
 
     logger.debug("Building Cannon label vector array")
@@ -975,5 +1031,13 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
     else:
         offsets = np.zeros(len(labels.colnames))
 
-    return (_build_label_vector_rows(label_vector, labels).T, indices, offsets)
+    lva = _build_label_vector_rows(label_vector, labels).T
+    if ignore_non_finites:
+        use = np.all(np.isfinite(lva), axis=0)
+        lva, indices = lva[:, use], indices[use]
+
+    use = np.zeros(len(labels), dtype=bool)
+    use[indices] = True
+
+    return (lva, use, offsets)
 

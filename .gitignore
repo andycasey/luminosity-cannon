@@ -14,4 +14,7 @@
 *.fits
 *.fits.*
 
+*.png
+
+model_search/
 data/
