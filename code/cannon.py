@@ -68,6 +68,19 @@ class CannonModel(object):
         return None
 
 
+    @property
+    def _trained_hash(self):
+        """
+        Return a hash of the trained state.
+        """
+
+        if not self._trained:
+            return None
+        args = (self._coefficients, self._scatter, self._offsets,
+            self._label_vector_description)
+        return "".join([str(hash(str(each)))[:10] for each in args])
+
+
     def _check_data(self, labels, fluxes, flux_uncertainties):
         """
         Check that the labels, flux and flux uncertainty data is OK.
@@ -312,7 +325,49 @@ class CannonModel(object):
         return labels
 
 
-    def cross_validate(self, label_vector_description, N=1, N_combinations=1000,
+    @property
+    def residuals(self):
+        """
+        Calculate the residuals of the inferred labels using the trained model.
+
+        :returns:
+            The corresponding label names, the expected labels for all stars in
+            the training set, and the inferred labels.
+
+        :raises TypeError:
+            If the model is not trained.
+        """
+
+        if not self._trained:
+            raise TypeError("model must be trained first")
+
+        try:
+            if self._residuals_hash == self._trained_hash \
+            and self._trained_hash is not None:
+                return self._residuals_cache
+
+        except AttributeError:
+            None
+
+        label_indices, label_names = self._get_linear_indices(
+            self._label_vector_description, full_output=True)
+        expected_labels = np.zeros((self._fluxes.shape[0], len(label_names)))
+        inferred_labels = np.zeros((self._fluxes.shape[0], len(label_names)))
+
+        for i, (flux, uncertainty) \
+        in enumerate(zip(self._fluxes, self._flux_uncertainties)):
+            inferred = self.solve_labels(flux, uncertainty)
+            for j, label_name in enumerate(label_names):
+                expected_labels[i, j] = self._labels[label_name][i]
+                inferred_labels[i, j] = inferred[label_name]
+
+        # Cache for future, unless the training state changes.
+        self._residuals_hash = self._trained_hash
+        self._residuals_cache = (label_names, expected_labels, inferred_labels)
+        return self._residuals_cache
+
+
+    def cross_validate(self, label_vector_description, N=1, max_combinations=1000,
         **kwargs):
         """
         Perform cross-validation on the trained model.
@@ -329,20 +384,20 @@ class CannonModel(object):
         :type N:
             int
 
-        :param N_combinations: [optional]
+        :param max_combinations: [optional]
             The maximum number of cross-validation combinations to run. If None
             or -1 is given then all possible combinations based on `N` will be
             run. Note that for `N > 1`, this can result in a very large number
             of combinations.
 
-        :type N_combinations:
+        :type max_combinations:
             int
         """
 
         R = len(self._labels)
         M = range(R)
-        if N_combinations in (None, -1):
-            N_combinations = factorial(N) / factorial(R) / factorial(N - R)
+        if max_combinations in (None, -1):
+            max_combinations = factorial(N) / factorial(R) / factorial(N - R)
 
         # Shake it all about.
         random.shuffle(M)
@@ -351,13 +406,13 @@ class CannonModel(object):
         label_indices, label_names = self._get_linear_indices(
             label_vector_description, full_output=True)
 
-        inferred_test_labels = np.empty((N_combinations, N, len(label_names)))
-        expected_test_labels = np.empty((N_combinations, N, len(label_names)))
-        testing_set_indices = np.empty((N_combinations, N))
+        inferred_test_labels = np.empty((max_combinations, N, len(label_names)))
+        expected_test_labels = np.empty((max_combinations, N, len(label_names)))
+        testing_set_indices = np.empty((max_combinations, N))
 
         # Go through each combination.
         for i, indices in enumerate(combinations(M, N)):
-            if i >= N_combinations:
+            if i >= max_combinations:
                 break
 
             indices = np.array(indices)
