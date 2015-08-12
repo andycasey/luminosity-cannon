@@ -9,7 +9,7 @@ import os
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-from astropy.table import Table
+from astropy.table import Column, Table
 from code.cannon import CannonModel
 
 
@@ -33,13 +33,28 @@ fluxes = np.memmap("{}-flux.memmap".format(FILENAME_PREFIX), mode="r",
 flux_uncertainties = np.memmap("{}-flux-uncertainties.memmap".format(
     FILENAME_PREFIX), mode="r", dtype=float).reshape(fluxes.shape)
 
+# Calculate distance modulus
+mu = 5 * np.log10(1000./(stars["Plx"])) - 5
+
+# Apparent magnitudes:
+# JHK all present.
+magnitudes = ("J", "H", "K")
+for magnitude in magnitudes:
+    stars.add_column(Column(name="{}_ABS".format(magnitude),
+        data=stars[magnitude] - mu))
+
+#stars.write("temp.fits.gz")
+#stars = Table.read("temp.fits.gz")
+
 # Specify different label vector descriptions.
 label_vector_descriptions = [
-    "TEFF",
-    "TEFF^2 TEFF",
-    "TEFF^3 TEFF^2 TEFF",
     "TEFF^4 TEFF^3 TEFF^2 TEFF",
-    "TEFF^5 TEFF^4 TEFF^3 TEFF^2 TEFF"
+    "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2 LOGG^3 LOGG^4 LOGG^5",
+#    "J_ABS J_ABS^2 J_ABS^3",
+    "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2 LOGG^3 LOGG^4 LOGG^5 J_ABS J_ABS^2 J_ABS^3",
+    "J_ABS H_ABS K_ABS J_ABS*H_ABS J_ABS*K_ABS H_ABS*K_ABS",
+    "J_ABS H_ABS K_ABS J_ABS*H_ABS J_ABS*K_ABS H_ABS*K_ABS J_ABS^2 H_ABS^2 K_ABS^2",
+    "J_ABS H_ABS K_ABS J_ABS*H_ABS J_ABS*K_ABS H_ABS*K_ABS J_ABS^2 H_ABS^2 K_ABS^2 J_ABS^3 H_ABS^3 K_ABS^3",
 ]
 
 for i, label_vector_description in enumerate(label_vector_descriptions):
@@ -58,7 +73,7 @@ for i, label_vector_description in enumerate(label_vector_descriptions):
     model.train(label_vector_description)
 
     # Calculate residuals.
-    labels, expected, inferred = model.residuals
+    labels, expected, inferred = model.label_residuals
 
     # Plot residuals.
     fig, axes = plt.subplots(1, len(labels))
@@ -68,17 +83,26 @@ for i, label_vector_description in enumerate(label_vector_descriptions):
         ax.set_xlabel(label)
         ax.set_ylabel("Inferred {}".format(label))
         ax.set_title("mean / median / |sigma| = {0:.2f} / {1:.2f} / {2:.2f}".format(
-            np.mean(expected[:, i] - inferred[:, i]),
-            np.median(expected[:, i] - inferred[:, i]),
-            np.std(np.abs(expected[:, i] - inferred[:, i]))))
+            np.nanmean(expected[:, i] - inferred[:, i]),
+            np.nanmedian(expected[:, i] - inferred[:, i]),
+            np.nanstd(np.abs(expected[:, i] - inferred[:, i]))),
+        fontsize=6)
 
         min_limit = min([ax.get_xlim()[0], ax.get_ylim()[0]])
         max_limit = max([ax.get_xlim()[1], ax.get_ylim()[1]])
         ax.set_xlim(min_limit, max_limit)
         ax.set_ylim(min_limit, max_limit)
 
-    fig.savefig("{0}/{1}-{2}.{3}.png".format(OUTPUT_DIR,
-        random_word(), random_word(), label_vector_hash))
+    a = random_word()
+    b = random_word()
+    fig.savefig("{0}/{1}-{2}.{3}.png".format(OUTPUT_DIR, a, b,
+        label_vector_hash))
+
+    fig, ax = plt.subplots()
+    ax.plot(model._scatter, c='k')
+    fig.savefig("{0}/{1}-{2}-scatter.{3}.png".format(OUTPUT_DIR, a, b,
+        label_vector_hash))
+
     #plt.close("all")
     
     # Save the model.
