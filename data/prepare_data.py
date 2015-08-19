@@ -169,11 +169,18 @@ if __name__ == "__main__":
     save_sample(clstars, clfluxes, clflux_uncertainties, "APOGEE-Clusters")
 
     # Both.
-    common = set(hipstars.dtype.names).intersection(clstars)
-    for column in hipstars.dtype.names:
-        if column not in common:
-            del hipstars[column]
+    clstars["SAMPLE"] = "CL"
+    hipstars["SAMPLE"] = "HIP"
 
+    del hipstars["PARAM_COV"], hipstars["FPARAM_COV"]
+
+    common = set(hipstars.dtype.names).intersection(clstars.dtype.names)
+    for column, (dtype, _) in hipstars.dtype.fields.items():
+        if column not in common:
+            _ = hipstars[column].copy()[:len(clstars)]
+            _.data[:] = np.nan
+            clstars[column] = _
+        
     both_samples = vstack([hipstars, clstars])
     fluxes = np.vstack([hipfluxes, clfluxes])
     flux_uncertainties = np.vstack([hipflux_uncertainties, clflux_uncertainties])
