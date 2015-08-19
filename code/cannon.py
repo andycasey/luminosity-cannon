@@ -424,97 +424,63 @@ class CannonModel(object):
 
 
     @requires_training_wheels
-    def cross_validate(self, label_vector_description, N=1, max_combinations=1000,
-        **kwargs):
+    def cross_validate(self, label_vector_description=None, **kwargs):
         """
-        Perform cross-validation on the trained model.
+        Perform leave-one-out cross-validation on the trained model.
 
-        :params label_vector_description:
-            The human-readable form of the label vector description.
+        :params label_vector_description: [optional]
+            The human-readable form of the label vector description. If None is
+            given, the currently trained label vector description is used.
 
         :type label_vector_description:
             str
 
-        :param N: [optional]
-            The number of stars (rows) to use in the testing dataset.
-
-        :type N:
-            int
-
-        :param max_combinations: [optional]
-            The maximum number of cross-validation combinations to run. If None
-            or -1 is given then all possible combinations based on `N` will be
-            run. Note that for `N > 1`, this can result in a very large number
-            of combinations.
-
-        :type max_combinations:
-            int
+        :returns:
+            A two-length tuple containing an array of the expected train labels
+            for each star, and the inferred labels.
         """
 
-        R = len(self._labels)
-        M = range(R)
-        if max_combinations in (None, -1):
-            max_combinations = factorial(N) / factorial(R) / factorial(N - R)
-
-        # Shake it all about.
-        random.shuffle(M)
-
         # Initialise arrays.
+        if label_vector_description is None:
+            label_vector_description = self._label_vector_description
+
         label_indices, label_names = self._get_linear_indices(
             label_vector_description, full_output=True)
 
-        inferred_test_labels = np.empty((max_combinations, N, len(label_names)))
-        expected_test_labels = np.empty((max_combinations, N, len(label_names)))
-        testing_set_indices = np.empty((max_combinations, N))
+        N_realisations, N_labels = self._fluxes.shape[0], len(label_names)
+        inferred_test_labels = np.nan * np.ones((N_realisations, N_labels))
+        expected_test_labels = np.ones((N_realisations, N_labels))
+        testing_set_indices = np.ones(N_realisations)
 
         # Go through each combination.
-        for i, indices in enumerate(combinations(M, N)):
-            if i >= max_combinations:
-                break
+        # [TODO] Thread everything.
+        for i in range(N_realisations):
 
-            indices = np.array(indices)
-            train = np.ones(len(self._labels), dtype=bool)
-            train[indices] = False
+            mask = np.ones(N_realisations, dtype=bool)
+            mask[i] = False
 
             # Create a model to use so we don't overwrite self.
-            model = self.__class__(self._labels[train], self._fluxes[train, :],
-                self._flux_uncertainties[train, :])
+            model = self.__class__(self._labels[mask], self._fluxes[mask, :],
+                self._flux_uncertainties[mask, :])
             model.train(label_vector_description, **kwargs)
 
-            # Now solve for the testing set.
-            results = []
-            for j, (all_labels, fluxes, flux_uncertainties) \
-            in enumerate(zip(self._labels[~train], self._fluxes[~train, :],
-                self._flux_uncertainties[~train, :])):
+            # Solve for the one left out.
+            try:
+                inferred_labels = model.solve_labels(
+                    self._fluxes[~mask, :].flatten(),
+                    self._flux_uncertainties[~mask, :].flatten())
+            except:
+                logger.exception("Exception in solving star with index {0} in "\
+                    "cross-validation".format(i))
+                inferred_labels \
+                    = dict(zip(label_names, np.nan * np.ones(N_labels)))
 
-                inferred_labels = model.solve_labels(fluxes, flux_uncertainties)
+            # Save the expected and inferred labels.
+            for j, name in enumerate(label_names):
+                expected_test_labels[i, j] = self._labels[~mask][name]
+                inferred_test_labels[i, j] = inferred_labels[name]
 
-                # Save the results.
-                for k, name in enumerate(label_names):
-                    expected_test_labels[i, j, k] = all_labels[name]
-                    inferred_test_labels[i, j, k] = inferred_labels[name]
-
-            # Save the indices.
-            testing_set_indices[i, :] = indices
-
-        # [TODO] Need to shuffle the combinations some how.
-        # [TODO] Thread everything.
-        # [TODO] Make it fail-safe against falling over on a single permutation.
-        # [TODO] Safeguard against dumb input.
-        raise a
-
-
-        # Create a model that we will use so we don't overwrite self.
-
-
-        # For each combination:
-        # - train the model without the test set.
-        # - Solve for labels on the test set
-        # - Keep the (training set indices, expected results, solved results)
-
-        # Return everything separately:
-
-        raise NotImplementedError("soon...")
+        return (expected_test_labels, inferred_test_labels)
 
 
     def _check_forbidden_label_characters(self, characters):
