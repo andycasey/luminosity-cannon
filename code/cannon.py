@@ -897,8 +897,15 @@ def _fit_pixel(fluxes, flux_uncertainties, lv_array, debug=False):
     
     # Optimise the scatter, and at each scatter value we will calculate the
     # optimal vector coefficients.
-    op_scatter = op.fmin_powell(_pixel_scatter_nll, scatter,
-        args=(fluxes, flux_uncertainties, lv_array), disp=False) 
+    op_scatter, fopt, direc, n_iter, n_funcs, warnflag = op.fmin_powell(
+        _pixel_scatter_nll, scatter, args=(fluxes, flux_uncertainties, lv_array),
+        disp=False, full_output=True)
+
+    if warnflag > 0:
+        logger.warn("Warning: {}".format([
+            "Maximum number of function evaluations made during optimisation.",
+            "Maximum number of iterations made during optimisation."
+            ][warnflag - 1]))
 
     # Calculate the coefficients at the optimal scatter value.
     # Note that if we can't solve for the coefficients, we should just set them
