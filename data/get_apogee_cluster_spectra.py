@@ -6,6 +6,7 @@
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import os
+import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
 
@@ -33,8 +34,11 @@ cluster_names = ("M2", "M3", "M13", "M15", "M53", "M67", "M71", "M92")
 #   N2243
 
 command = ("wget -O APOGEE/Clusters/{cluster_name}/{file}"
-    " http://data.sdss3.org/sas/dr12/apogee/spectro/redux/r5/"
-    "stars/{telescope}/{location_id}/{file}")
+        " http://data.sdss3.org/sas/dr12/apogee/spectro/redux/r5/"
+        "stars/l25_6d/v603/{location_id}/{file}")
+#    " http://data.sdss3.org/sas/dr12/apogee/spectro/redux/r5/"
+#    "stars/{telescope}/{location_id}/{file}")
+
 
 apogee = fits.open("APOGEE-allStar-v603.fits")[1].data
 ok = (apogee["SNR"] > 80.) * (np.abs(apogee["VHELIO_AVG"]) < 500) \
@@ -65,7 +69,7 @@ membership_criteria = {
 }
 
 if not os.path.exists("APOGEE/Clusters/plots/"):
-    os.mkdirs("APOGEE/Clusters/plots/")
+    os.makedirs("APOGEE/Clusters/plots/")
 
 for cluster_name in cluster_names:
 
@@ -111,4 +115,4 @@ for cluster_name in cluster_names:
     for member in apogee[members]:
         os.system(command.format(cluster_name=cluster_name,
             telescope=member["TELESCOPE"], location_id=member["LOCATION_ID"],
-            file=member["FILE"]))
+            file=member["FILE"].replace("apStar-r5-", "aspcapStar-r5-v603-")))
