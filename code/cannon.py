@@ -450,7 +450,6 @@ class CannonModel(object):
         N_realisations, N_labels = self._fluxes.shape[0], len(label_names)
         inferred_test_labels = np.nan * np.ones((N_realisations, N_labels))
         expected_test_labels = np.ones((N_realisations, N_labels))
-        testing_set_indices = np.ones(N_realisations)
 
         # Go through each combination.
         # [TODO] Thread everything.
@@ -472,15 +471,18 @@ class CannonModel(object):
             except:
                 logger.exception("Exception in solving star with index {0} in "\
                     "cross-validation".format(i))
-                inferred_labels \
-                    = dict(zip(label_names, np.nan * np.ones(N_labels)))
 
-            # Save the expected and inferred labels.
-            for j, name in enumerate(label_names):
-                expected_test_labels[i, j] = self._labels[~mask][name]
-                inferred_test_labels[i, j] = inferred_labels[name]
+            else:
+                # Save inferred test labels.
+                for j, name in enumerate(label_names):
+                    inferred_test_labels[i, j] = inferred_labels[name]
 
-        return (expected_test_labels, inferred_test_labels)
+            finally:
+                # Save expected test labels.
+                for j, name in enumerate(label_names):
+                    expected_test_labels[i, j] = self._labels[~mask][name]
+                
+        return (label_names, elxpected_test_labels, inferred_test_labels)
 
 
     def _check_forbidden_label_characters(self, characters):

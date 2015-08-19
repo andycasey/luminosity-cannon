@@ -12,20 +12,23 @@ from glob import glob
 from astropy.io import fits
 from astropy.table import Table, vstack
 
+np.random.seed(123)
 
 __cluster_distances = {
-    "M67": (0.908, "Kharchenko et al. (2005)"),
-    "M2":  (11.5, "Harris"),
-    "M3":  (10.2, "Harris"),
-    "M13": (7.1, "Harris"),
-    "M15": (10.4, "Harris"),
-    "M53": (17.9, "Harris"),
-    "M71": (4.0, "Harris"),
-    "M92": (8.3, "Harris"),
+    # Distance in parsecs, core radius in arcmin, half-light radius in arcmin, distance reference.
+    # R_core from Davenport et al. 2010
+    "M67": (   908, 8.40, "Kharchenko et al. (2005)"), 
+    "M2":  (11.5e3, 0.32, "Harris"),
+    "M3":  (10.2e3, 0.37, "Harris"),
+    "M13": ( 7.1e3, 0.62, "Harris"),
+    "M15": (10.4e3, 0.14, "Harris"), # c
+    "M53": (17.9e3, 0.35, "Harris"),
+    "M71": ( 4.0e3, 0.63, "Harris"),
+    "M92": ( 8.3e3, 0.26, "Harris"),
 }
 
 
-def get_apogee_cluster_sample():
+def get_apogee_cluster_sample(perturb_distances=True):
     """
     Prepare APOGEE Cluster spectra and data table in a convenient format.
     """
@@ -72,7 +75,19 @@ def get_apogee_cluster_sample():
         indices[i] = index[0]
 
         cluster_name = filename.split("/")[-2]
-        mu[i] = 5 * np.log10(__cluster_distances[cluster_name][0]) - 5
+        #mu = 5 * log_10(d [pc]) - 5
+        # 10**((mu + 5)/5.)
+        distance, core_radius_arcmin = __cluster_distances[cluster_name][:2]
+
+        if perturb_distances:            
+            # Calculate core_radius in parsecs.
+            core_radius = distance * np.tan(np.pi/180 * core_radius_arcmin/60.)
+            distance_realisation = np.random.normal(distance, core_radius)
+
+        else:
+            distance_realisation = distance
+
+        mu[i] = 5. * np.log10(distance_realisation) - 5
 
     cluster_stars = Table(apogee[indices])
     cluster_stars["mu"] = mu
