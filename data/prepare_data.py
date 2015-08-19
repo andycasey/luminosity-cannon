@@ -17,7 +17,7 @@ np.random.seed(123)
 __cluster_distances = {
     # Distance in parsecs, core radius in arcmin, half-light radius in arcmin, distance reference.
     # R_core from Davenport et al. 2010
-    "M67": (   908, 8.40, "Kharchenko et al. (2005)"), 
+    "M67": (   908, 8.40, "Kharchenko et al. (2005)"),
     "M2":  (11.5e3, 0.32, "Harris"),
     "M3":  (10.2e3, 0.37, "Harris"),
     "M13": ( 7.1e3, 0.62, "Harris"),
@@ -28,7 +28,7 @@ __cluster_distances = {
 }
 
 
-def get_apogee_cluster_sample(perturb_distances=True):
+def get_apogee_cluster_sample(perturb_distances=False):
     """
     Prepare APOGEE Cluster spectra and data table in a convenient format.
     """
@@ -76,13 +76,15 @@ def get_apogee_cluster_sample(perturb_distances=True):
 
         cluster_name = filename.split("/")[-2]
         #mu = 5 * log_10(d [pc]) - 5
-        # 10**((mu + 5)/5.)
         distance, core_radius_arcmin = __cluster_distances[cluster_name][:2]
 
         if perturb_distances:            
             # Calculate core_radius in parsecs.
             core_radius = distance * np.tan(np.pi/180 * core_radius_arcmin/60.)
             distance_realisation = np.random.normal(distance, core_radius)
+
+            if distance > 16000:
+                raise a
 
         else:
             distance_realisation = distance

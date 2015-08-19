@@ -17,6 +17,7 @@ from warnings import simplefilter
 import scipy.optimize as op
 from astropy.table import Table
 
+from . import (plot, )
 
 # Speak up.
 logging.basicConfig(level=logging.INFO, 
@@ -32,10 +33,10 @@ def requires_training_wheels(f):
     """
     A decorator for CannonModel functions where the model needs training first.
     """
-    def wrapper(model, *args):
+    def wrapper(model, *args, **kwargs):
         if not model._trained:
             raise TypeError("the model needs training first")
-        return f(model, *args)
+        return f(model, *args, **kwargs)
     return wrapper
 
 
@@ -68,7 +69,7 @@ class CannonModel(object):
         """
 
         self._check_data(labels, fluxes, flux_uncertainties)
-
+        self._wavelengths = None
         self._trained = False
         self._labels = labels
         self._label_vector_description = None
@@ -717,6 +718,32 @@ class CannonModel(object):
         return True
 
 
+    @requires_training_wheels
+    def plot_flux_residuals(self, parameter=None, percentile=False, **kwargs):
+        """
+        Plot the flux residuals as a function of an optional parameter or label.
+
+        :param parameter: [optional]
+            The name of a column provided in the labels table for this model. If
+            none is provided, the spectra will be sorted by increasing $\chi^2$.
+
+        :type parameter:
+            str
+
+        :param percentile: [optional]
+            Display model residuals as a percentage of the flux difference, not
+            in absolute terms.
+
+        :type percentile:
+            bool
+
+        :returns:
+            A figure showing the flux residuals.
+        """
+        return plot.flux_residuals(self, parameter, percentile, **kwargs)
+
+
+
 def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
     full_output=False):
     """
@@ -924,7 +951,7 @@ def _build_label_vector_rows(label_vector, labels):
     for cross_terms in label_vector:
         column = 1
         for descr, order in cross_terms:
-            column *= labels[descr].flatten()**order
+            column *= np.array(labels[descr]).flatten()**order
         columns.append(column)
 
     try:

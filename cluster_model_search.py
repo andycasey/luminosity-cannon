@@ -13,16 +13,18 @@ from astropy.table import Column, Table
 from code.cannon import CannonModel
 
 
-PREFIX = "data/APOGEE-Clusters"
-LABEL_VECTOR_DESCRIPTION = "TEFF LOGG LOGG^2  TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS"
-LABEL_VECTOR_DESCRIPTION = "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2 TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^3 K_ABS^2 K_ABS JmK_ABS^5 JmK_ABS^4 JmK_ABS^3 JmK_ABS^2 JmK_ABS JmK_ABS^2*K_ABS JmK_ABS*K_ABS^2 JmK_ABS*K_ABS" 
+SHOW_AS_PERCENT = True
+    
+DATA_PREFIX = "data/APOGEE-Clusters+Hipparcos"
+LABEL_VECTOR_DESCRIPTION = "TEFF LOGG LOGG^2 TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS"
+#LABEL_VECTOR_DESCRIPTION = "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2 TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^3 K_ABS^2 K_ABS JmK_ABS^5 JmK_ABS^4 JmK_ABS^3 JmK_ABS^2 JmK_ABS JmK_ABS^2*K_ABS JmK_ABS*K_ABS^2 JmK_ABS*K_ABS" 
 
 if __name__ == "__main__":
 
 
-    stars = Table.read("{}.fits.gz".format(PREFIX))
-    fluxes = np.memmap("{}-flux.memmap".format(PREFIX), mode="r", dtype=float)
-    flux_uncertainties = np.memmap("{}-flux-uncertainties.memmap".format(PREFIX),
+    stars = Table.read("{}.fits.gz".format(DATA_PREFIX))
+    fluxes = np.memmap("{}-flux.memmap".format(DATA_PREFIX), mode="r", dtype=float)
+    flux_uncertainties = np.memmap("{}-flux-uncertainties.memmap".format(DATA_PREFIX),
         mode="r", dtype=float)
 
     # Re-shape
@@ -40,9 +42,19 @@ if __name__ == "__main__":
     stars.add_column(Column(name="HmK_ABS", data=stars["H_ABS"] - stars["K_ABS"]))
     stars.add_column(Column(name="JmH_ABS", data=stars["J_ABS"] - stars["H_ABS"]))
 
-    model = CannonModel(stars, fluxes, flux_uncertainties)
-    model.train(LABEL_VECTOR_DESCRIPTION)
+    ok = np.array((stars["e_Hpmag"] < 0.01) * np.isfinite(stars["J"] * stars["H"] * stars["K"]) \
+        * (stars["Plx"] > 0) * (stars["e_Plx"]/stars["Plx"] < 0.1) * (stars["K_ERR"] < 0.10))
+    ok += (stars["SAMPLE"] == "CL")
 
+    stars = stars[ok]
+    fluxes = fluxes[ok]
+    flux_uncertainties = flux_uncertainties[ok]
+
+    model = CannonModel(stars, fluxes, flux_uncertainties)
+    #print("LOADING")
+    #model.load("tmp")
+    model.train(LABEL_VECTOR_DESCRIPTION)
+    
     # Calculate residuals.
     labels, expected, inferred = model.label_residuals
 
@@ -75,7 +87,6 @@ if __name__ == "__main__":
         if label.rstrip("_ABS") in magnitudes:
             distance_labels.append(label[:-4])
 
-    SHOW_PERCENT = True
     if len(distance_labels) > 0:
         for label in distance_labels:
 
@@ -90,7 +101,7 @@ if __name__ == "__main__":
             difference_percent = 100 * (inferred_distance - expected_distance)/expected_distance
             ax[0].axhline(0, c="#666666", zorder=-1)
 
-            if SHOW_PERCENT:
+            if SHOW_AS_PERCENT:
                 difference, units = difference_percent, r"\%"
             else:
                 difference, units = difference_absolute, r"kpc"
