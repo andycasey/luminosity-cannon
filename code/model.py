@@ -61,11 +61,12 @@ class BaseModel(object):
         self._fluxes, self._flux_uncertainties = fluxes, flux_uncertainties
 
         if verify:
+            self._check_data(labels, fluxes, flux_uncertainties, wavelengths)
             self._check_forbidden_label_characters("^*")
         return None
 
 
-    def _check_data(self, labels, fluxes, flux_uncertainties):
+    def _check_data(self, labels, fluxes, flux_uncertainties, wavelengths=None):
         """
         Check that the labels, flux and flux uncertainty data is OK.
 
@@ -89,6 +90,12 @@ class BaseModel(object):
 
         :type flux_uncertainties:
             :class:`np.ndarray`
+
+        :param wavelengths: [optional]
+            The wavelengths corresponding to the given pixels.
+
+        :type wavelengths:
+            :class:`np.array`
         """
 
         fluxes = np.atleast_2d(fluxes)
@@ -104,6 +111,13 @@ class BaseModel(object):
 
         if len(labels) == 0:
             raise ValueError("no stars (labels) given")
+
+        if wavelengths is not None:
+            wavelengths = np.atleast_1d(wavelengths)
+            if wavelengths.size != fluxes.shape[1]:
+                raise ValueError("mis-match between number of wavelength values"
+                    " ({0}) and flux values ({1})".format(
+                        wavelengths.size, fluxes.shape[1]))
 
         return None
 
@@ -132,4 +146,3 @@ class BaseModel(object):
                         " label '{1}' - to ignore this use verify=False".format(
                             character, column))
         return True
-
