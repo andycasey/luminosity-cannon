@@ -7,10 +7,9 @@ __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import numpy as np
 
-
 def requires_training_wheels(f):
     """
-    A decorator for CannonModel functions where the model needs training first.
+    A decorator for model functions where the model needs training first.
     """
     def wrapper(model, *args, **kwargs):
         if not model._trained:
@@ -21,7 +20,8 @@ def requires_training_wheels(f):
 
 class BaseModel(object):
 
-    def __init__(self, labels, fluxes, flux_uncertainties, verify=True):
+    def __init__(self, labels, fluxes, flux_uncertainties, wavelengths=None,
+        verify=True):
         """
         Initialise a base model.
 
@@ -45,10 +45,16 @@ class BaseModel(object):
 
         :type flux_uncertainties:
             :class:`np.ndarray`
+
+        :param wavelengths: [optional]
+            The wavelengths corresponding to the given pixels.
+
+        :type wavelengths:
+            :class:`np.array`
         """
 
         self._check_data(labels, fluxes, flux_uncertainties)
-        self._wavelengths = None
+        self._wavelengths = wavelengths
         self._trained = False
         self._labels = labels
         self._label_vector_description = None
@@ -126,3 +132,4 @@ class BaseModel(object):
                         " label '{1}' - to ignore this use verify=False".format(
                             character, column))
         return True
+
