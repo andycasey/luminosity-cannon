@@ -18,10 +18,11 @@ import scipy.optimize as op
 from astropy.table import Table
 
 try:
-    from . import (model, plot)
+    from . import (model, plot, utils)
 except ValueError:
     import model
     import plot
+    import utils
 
 
 class PendulumModel(model.BaseModel):
@@ -59,9 +60,8 @@ class PendulumModel(model.BaseModel):
             :class:`np.ndarray`
         """
 
-        super(self, model.BaseModel).__init__(self, labels, fluxes,
-            flux_uncertainties, verify=verify, wavelengths=wavelengths)
-
+        super(self.__class__, self).__init__(labels, fluxes, flux_uncertainties,
+            verify=verify, wavelengths=wavelengths)
         return None
 
 
@@ -75,11 +75,27 @@ class PendulumModel(model.BaseModel):
         # Fit pixel-by-pixel scatter & label vector. 
         """
 
-        # For each star, fit the equivalent widths (+ continuum, + RV)
+        if N is not None or limits is not None or pivot:
+            raise NotImplementedError
 
-        # Fit functions of the EW
+        # For each star, fit the equivalent widths.
 
-        """
+        N_stars, N_atomic_lines = self._fluxes.shape[0], atomic_wavelengths.size
+        equivalent_widths = np.nan * np.ones((N_stars, N_atomic_lines))
+
+        msg = "Measuring equivalent widths of {0} atomic lines in {1} stars:"\
+            .format(N_atomic_lines, N_stars)
+        with utils.ProgressBar(msg, kwargs.get("__progressbar", True)) as pb:
+
+            for i in range(N_stars):
+                pb.update(i, N_stars)
+                equivalent_widths[i, :] = _fit_absorption_profiles(
+                    self._wavelengths, self._fluxes[i, :],
+                    self._flux_uncertainties[i, :], atomic_wavelengths)
+
+
+        raise a
+
 
         self._label_vector_description = label_vector_description
         
@@ -124,7 +140,6 @@ class PendulumModel(model.BaseModel):
             = coefficients, scatter, offsets, True
 
         return (coefficients, scatter, offsets)
-        """
         raise NotImplementedError
 
 
@@ -187,7 +202,7 @@ def _absorption_line_mask(wavelengths, atomic_wavelengths, window):
     """
 
     mask = np.zeros(wavelengths.size, dtype=bool)
-    for atomic_wavelength in atomic_wavelengths:
+    for atomic_wavelength in np.atleast_1d(atomic_wavelengths):
         lower, upper = atomic_wavelength - window, atomic_wavelength + window
         mask += (upper > wavelengths) * (wavelengths > lower)
     return mask
@@ -196,7 +211,7 @@ def _absorption_line_mask(wavelengths, atomic_wavelengths, window):
 
 
 def _fit_absorption_profiles(wavelengths, fluxes, flux_uncertainties,
-    atomic_wavelengths, **kwargs):
+    atomic_wavelengths, DEBUG=False, full_output=False, **kwargs):
     """
     Assumed perfectly normalised, but this is extensible to treat continuum and
     radial velocity.
@@ -215,36 +230,92 @@ def _fit_absorption_profiles(wavelengths, fluxes, flux_uncertainties,
     kernel = op.fmin(_nll_single_kernel, 0.1, args=(x, y, y_err, fds,
         atomic_wavelengths), disp=False)
 
+    if DEBUG:
 
-    fig, ax = plt.subplots()
-    ax.plot(wavelengths, fluxes, c='k')
-    ax.scatter(x, y, facecolor="r")
-    model_fluxes = _model_absorption_lines_single_kernel(wavelengths, kernel,
-        fds, atomic_wavelengths)
-    ax.plot(wavelengths, model_fluxes, c='r')
-
-    # Now actually model the LSF.
-    lsf_degree = kwargs.pop("lsf_degree", 4)
-    if lsf_degree > 0:
-
-        mask = _absorption_line_mask(wavelengths, atomic_wavelengths, 3*kernel)
-        x, y, y_err = wavelengths[mask], fluxes[mask], flux_uncertainties[mask]
-
-        p0 = np.hstack([np.zeros(lsf_degree), kernel])
-        kernel_coefficients = op.fmin(_nll_absorption_lines, p0,
-            args=(x, y, y_err, fds, atomic_wavelengths), disp=False)
-
-        model_fluxes = _model_absorption_lines(wavelengths, kernel_coefficients,
+        fig, ax = plt.subplots()
+        ax.plot(wavelengths, fluxes, c='k')
+        ax.scatter(x, y, facecolor="r")
+        model_fluxes = _model_absorption_lines_single_kernel(wavelengths, kernel,
             fds, atomic_wavelengths)
-        ax.plot(wavelengths, model_fluxes, c='b')
+        ax.plot(wavelengths, model_fluxes, c='r')
+
+        # Now actually model the LSF.
+        lsf_degree = kwargs.pop("lsf_degree", 4)
+        if lsf_degree > 0:
+
+            mask = _absorption_line_mask(wavelengths, atomic_wavelengths, 3*kernel)
+            x, y, y_err = wavelengths[mask], fluxes[mask], flux_uncertainties[mask]
+
+            p0 = np.hstack([np.zeros(lsf_degree), kernel])
+            kernel_coefficients = op.fmin(_nll_absorption_lines, p0,
+                args=(x, y, y_err, fds, atomic_wavelengths), disp=False)
+
+            model_fluxes = _model_absorption_lines(wavelengths, kernel_coefficients,
+                fds, atomic_wavelengths)
+            ax.plot(wavelengths, model_fluxes, c='b')
 
 
     # Fit sigmas to each line?
     # wavelength_tolerance
 
+    # Need to return: EWs for each line, (wavelengths, sigmas, flux depths,)
 
-    raise a
+    #fitted_atomic_wavelengths =
 
+    # Prepare arrays.
+    profile_sigmas = kernel * np.ones(atomic_wavelengths.size)
+    profile_depths = fds.copy()
+    profile_wavelengths = atomic_wavelengths.copy()
+    
+    mu_tolerance = kwargs.pop("wavelength_tolerance",
+        np.diff(wavelengths).mean())
+
+    for i, (atomic_wavelength, depth) in enumerate(zip(atomic_wavelengths, fds)):
+
+        mask = _absorption_line_mask(wavelengths, atomic_wavelength, 5 * kernel)
+        if 3 >= mask.sum(): continue
+
+        x, y, y_err = wavelengths[mask], fluxes[mask], flux_uncertainties[mask]
+
+        # Fit a profile to this line.
+        p0 = [atomic_wavelength, kernel, depth]
+
+        def _bounded_gaussian(x, mu, sigma, amplitude, mu_bounds=None,
+            sigma_bounds=None, amplitude_bounds=None):
+            
+            if not (mu + mu_tolerance) > mu > (mu - mu_tolerance) \
+            or not (1.3 * kernel) > sigma > 0 \
+            or not 1 > amplitude > 0:
+                return np.inf * np.ones(x.size)
+            return gaussian(x, mu, sigma, amplitude)
+
+        p_opt, p_cov = op.curve_fit(_bounded_gaussian, x, y, p0=p0, sigma=y_err,
+            absolute_sigma=True)
+        
+        profile_wavelengths[i], profile_sigmas[i], profile_depths[i] = p_opt
+
+        if DEBUG:
+
+            fig, ax = plt.subplots()
+            ax.plot(x, y, c='k')
+            ax.plot(x, gaussian(x, *p0), c='r')
+            ax.plot(x, gaussian(x, *p_opt), c='b')
+
+            ax.axvline(atomic_wavelength, c='r')
+            ax.axvline(p_opt[0], c='b')
+            ax.axvline(atomic_wavelength - mu_tolerance, c='g')
+            ax.axvline(atomic_wavelength + mu_tolerance, c='g')
+            
+            ax.set_title(p_opt[1]/kernel)
+
+    # Integrate profiles.
+    equivalent_widths = np.sqrt(2*np.pi) * profile_sigmas * profile_depths
+
+    if full_output:
+        return (equivalent_widths, profile_wavelengths, profile_sigmas, profile_depths)
+    return equivalent_widths
+
+    
     """
 
     # Using data +/- 3 sigma of each line, fit the line depths and the fwhm
@@ -252,13 +323,11 @@ def _fit_absorption_profiles(wavelengths, fluxes, flux_uncertainties,
     mask = _absorption_line_mask(wavelengths, atomic_wavelengths, 3*kernel)
     x, y, y_err = wavelengths[mask], fluxes[mask], flux_uncertainties[mask]
 
-    """
     f = lambda x, *p: _model_absorption_lines_single_kernel(x, p[0], p[1:],
         atomic_wavelengths)
 
     result = op.curve_fit(f, x, y, p0=np.hstack([kernel, fds]), sigma=y_err,
         absolute_sigma=True)
-    """
     f = lambda p: _nll_single_kernel(p[0], x, y, y_err, p[1:],
         atomic_wavelengths)
 
@@ -270,9 +339,6 @@ def _fit_absorption_profiles(wavelengths, fluxes, flux_uncertainties,
     ax.scatter(x, y, facecolor="b")
     ax.plot(wavelengths, model_fluxes2, c='b')
     """
-
-    raise a
-
 
 def _model_absorption_lines(wavelengths, kernel_coefficients, flux_depths,
     atomic_wavelengths, continuum=1):
@@ -424,6 +490,27 @@ if __name__ == "__main__":
 
 
     _fit_absorption_profiles(wavelengths, fluxes, uncertainties, atomic_wavelengths)
+
+
+
+    # Load model fluxes.
+    DATA_PREFIX = "../data/APOGEE-Hipparcos"
+    from astropy.table import Table
+
+    stars = Table.read("{}.fits.gz".format(DATA_PREFIX))
+    fluxes = np.memmap("{}-flux.memmap".format(DATA_PREFIX), mode="r", dtype=float)
+    flux_uncertainties = np.memmap("{}-flux-uncertainties.memmap".format(DATA_PREFIX),
+        mode="r", dtype=float)
+
+    # Re-shape
+    fluxes = fluxes.reshape((len(stars), -1))
+    flux_uncertainties = flux_uncertainties.reshape(fluxes.shape)
+    wavelengths = np.memmap("{}-wavelength.memmap".format(DATA_PREFIX), mode="r",
+        dtype=float)
+
+    model = PendulumModel(stars, wavelengths, fluxes, flux_uncertainties)
+    model.train(atomic_wavelengths)
+    raise a
 
 
 
