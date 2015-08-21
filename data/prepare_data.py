@@ -38,6 +38,8 @@ def get_apogee_cluster_sample(perturb_distances=False):
     N_stars = len(spectra_filenames)
     with fits.open(spectra_filenames[0]) as image:
         N_pixels = image[1].data.size
+        wavelengths = 10**(image[1].header["CRVAL1"] + \
+            np.arange(image[1].data.size) * image[1].header["CDELT1"])
 
     fluxes = np.zeros((N_stars, N_pixels))
     flux_uncertainties = np.zeros((N_stars, N_pixels))
@@ -51,6 +53,7 @@ def get_apogee_cluster_sample(perturb_distances=False):
 
     # Quality control.
     zero_pixels_everytime = np.all(0 >= fluxes, axis=0)
+    wavelengths = wavelengths[~zero_pixels_everytime]
     fluxes = fluxes[:, ~zero_pixels_everytime]
     flux_uncertainties = flux_uncertainties[:, ~zero_pixels_everytime]
 
@@ -94,7 +97,7 @@ def get_apogee_cluster_sample(perturb_distances=False):
     cluster_stars = Table(apogee[indices])
     cluster_stars["mu"] = mu
 
-    return (cluster_stars, fluxes, flux_uncertainties)
+    return (cluster_stars, wavelengths, fluxes, flux_uncertainties)
 
 
 def get_apogee_hipparcos_sample():
@@ -113,6 +116,8 @@ def get_apogee_hipparcos_sample():
     with fits.open("APOGEE/aspCap/HIP{}.fits".format(good_stars["HIP"][0])) \
     as image:
         N_pixels = image[1].data.size
+        wavelengths = 10**(image[1].header["CRVAL1"] + \
+            np.arange(image[1].data.size) * image[1].header["CDELT1"])
 
     N_stars = len(good_stars)
 
@@ -135,8 +140,11 @@ def get_apogee_hipparcos_sample():
     # - non-finite or zero fluxes --> set to 1 and set uncertainty as large
 
     zero_pixels_everytime = np.all(0 >= fluxes, axis=0)
+    
+
     fluxes = fluxes[:, ~zero_pixels_everytime]
     flux_uncertainties = flux_uncertainties[:, ~zero_pixels_everytime]
+    wavelengths = wavelengths[~zero_pixels_everytime]
 
     unphysical_uncertainties = (0 >= flux_uncertainties) \
         + ~np.isfinite(flux_uncertainties)
@@ -149,10 +157,10 @@ def get_apogee_hipparcos_sample():
     # Calculate distance moduli.
     good_stars["mu"] = 5 * np.log10(1000./(good_stars["Plx"])) - 5
 
-    return (good_stars, fluxes, flux_uncertainties)
+    return (good_stars, wavelengths, fluxes, flux_uncertainties)
 
 
-def save_sample(stars, fluxes, flux_uncertainties, prefix, clobber=True):
+def save_sample(stars, wavelengths, fluxes, flux_uncertainties, prefix, clobber=True):
     """
     Save a table and data arrays to disk.
     """
@@ -164,13 +172,16 @@ def save_sample(stars, fluxes, flux_uncertainties, prefix, clobber=True):
     and not clobber:
         raise IOError("file exists")
 
+    wavelengths_memmap = np.memmap("{}-wavelength.memmap".format(prefix),
+        mode="w+", dtype=float, shape=wavelengths.shape)
     fluxes_memmap = np.memmap("{}-flux.memmap".format(prefix), mode="w+",
         dtype=float, shape=fluxes.shape)
     flux_uncertainties_memmap = np.memmap("{}-flux-uncertainties.memmap".format(
         prefix), mode="w+", dtype=float, shape=flux_uncertainties.shape)
+    wavelengths_memmap[:] = wavelengths[:]
     fluxes_memmap[:] = fluxes[:]
     flux_uncertainties_memmap[:] = flux_uncertainties[:]
-    del fluxes_memmap, flux_uncertainties_memmap
+    del wavelengths_memmap, fluxes_memmap, flux_uncertainties_memmap
 
     return True
 
@@ -178,12 +189,12 @@ def save_sample(stars, fluxes, flux_uncertainties, prefix, clobber=True):
 if __name__ == "__main__":
 
     # Hipparcos (is saaaaah hipstar)
-    hipstars, hipfluxes, hipflux_uncertainties = get_apogee_hipparcos_sample()
-    save_sample(hipstars, hipfluxes, hipflux_uncertainties, "APOGEE-Hipparcos")
+    hipstars, hipwls, hipfluxes, hipflux_uncertainties = get_apogee_hipparcos_sample()
+    save_sample(hipstars, hipwls, hipfluxes, hipflux_uncertainties, "APOGEE-Hipparcos")
 
     # Clusters
-    clstars, clfluxes, clflux_uncertainties = get_apogee_cluster_sample()
-    save_sample(clstars, clfluxes, clflux_uncertainties, "APOGEE-Clusters")
+    clstars, clwls, clfluxes, clflux_uncertainties = get_apogee_cluster_sample()
+    save_sample(clstars, clwls, clfluxes, clflux_uncertainties, "APOGEE-Clusters")
 
     # Both.
     clstars["SAMPLE"] = "CL"
@@ -201,6 +212,6 @@ if __name__ == "__main__":
     both_samples = vstack([hipstars, clstars])
     fluxes = np.vstack([hipfluxes, clfluxes])
     flux_uncertainties = np.vstack([hipflux_uncertainties, clflux_uncertainties])
-    save_sample(both_samples, fluxes, flux_uncertainties, "APOGEE-Clusters+Hipparcos")
+    save_sample(both_samples, np.arange(fluxes.shape[1]), fluxes, flux_uncertainties, "APOGEE-Clusters+Hipparcos")
 
-    
+
