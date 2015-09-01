@@ -9,7 +9,6 @@ import cPickle as pickle
 import logging
 import numpy as np
 import random
-import sys
 from itertools import chain, combinations
 from math import factorial
 from warnings import simplefilter
@@ -17,7 +16,7 @@ from warnings import simplefilter
 import scipy.optimize as op
 from astropy.table import Table
 
-from . import (plot, )
+from . import (plot, utils)
 
 # Speak up.
 logging.basicConfig(level=logging.INFO, 
@@ -172,20 +171,11 @@ class CannonModel(object):
         coefficients = np.nan * np.ones((N_pixels, lva.shape[0]))
         
         # Display a progressbar unless requested otherwise.
-        increment = int(N_pixels / 100)
-        progressbar = kwargs.pop("__progressbar", True)
-        if progressbar:
-            sys.stdout.write("\rTraining Cannon model from {0} stars with {1} "\
-                "pixels each:\n".format(N_stars, N_pixels))
-            sys.stdout.flush()
-
-        for i in xrange(N_pixels):
-            if progressbar and (i == 0 or i % increment == 0):
-                sys.stdout.write("\r[{done}{not_done}] {percent:3.0f}%".format(
-                    done="=" * int((i + 1) / increment),
-                    not_done=" " * int((N_pixels - i - 1)/ increment),
-                    percent=100. * (i + 1)/N_pixels))
-                sys.stdout.flush()
+        pb_show = kwargs.pop("__progressbar", True)
+        pb_mesg = "Training Cannon model from {0} stars with {1} pixels each"\
+            .format(N_stars, N_pixels)
+        for i in utils.progressbar(range(N_pixels),
+            message=pb_mesg, size=N_pixels if pb_show else -1):
 
             coefficients[i, :], scatter[i] = _fit_pixel(
                 self._fluxes[use, i], self._flux_uncertainties[use, i], lva,
@@ -193,10 +183,6 @@ class CannonModel(object):
 
             if not np.any(np.isfinite(scatter[i] * coefficients[i, :])):
                 logger.warn("No finite coefficients at pixel {}!".format(i))
-
-        if progressbar:
-            sys.stdout.write("\r\n")
-            sys.stdout.flush()
 
         self._coefficients, self._scatter, self._offsets, self._trained \
             = coefficients, scatter, offsets, True

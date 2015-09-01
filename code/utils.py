@@ -6,35 +6,54 @@
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import sys
+import logging
 
+logger = logging.getLogger("cannon")
 
-class ProgressBar():
+def progressbar(iterable, message=None, size=100):
+    """
+    A progressbar.
 
-    def __init__(self, header=None, show=True):
-        self.header, self.show = header, show
+    :param iterable:
+        Some iterable to show progress for.
 
+    :type iterable:
+        iterable
 
-    def __enter__(self):
-        if self.show and self.header is not None:
-            sys.stdout.write("\r{}\n".format(self.header))
-        sys.stdout.flush()
-        return self
+    :param message: [optional]
+        A string message to show as the progressbar header.
 
-    def __exit__(self, *args):
-        if self.show:
-            sys.stdout.write("\r\n")
-            sys.stdout.flush()
+    :type message:
+        str
 
-    def update(self, i, N):
-        """ Show the progress from i to N. """
-        if not self.show: return 
+    :param size: [optional]
+        The size of the progressbar. If the size given is zero or negative, then
+        no progressbar will be shown.
 
-        increment = max(1, int(N / 100))
+    :type size:
+        int
+    """
+
+    count = len(iterable)
+    def _update(i):
+        if 0 >= size: return
+        increment = max(1, int(count / 100))
         if i == 0 or i % increment == 0:
             sys.stdout.write("\r[{done}{not_done}] {percent:3.0f}%".format(
                 done="=" * int((i + 1) / increment),
-                not_done=" " * int((N - i - 1)/increment),
-                percent=100. * (i + 1)/N))
+                not_done=" " * int((count - i - 1)/increment),
+                percent=100. * (i + 1)/count))
             sys.stdout.flush()
 
+    # Initialise
+    if size > 0:
+        logger.info((message or "").rstrip())
+        sys.stdout.flush()
 
+    for i, item in enumerate(iterable):
+        yield item
+        _update(i + 1)
+
+    if size > 0:
+        sys.stdout.write("\r\n")
+        sys.stdout.flush()
