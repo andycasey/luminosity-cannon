@@ -300,8 +300,6 @@ if __name__ == "__main__":
     clstars["SAMPLE"] = "CL"
     hipstars["SAMPLE"] = "HIP"
 
-    del hipstars["PARAM_COV"], hipstars["FPARAM_COV"]
-
     common = set(hipstars.dtype.names).intersection(clstars.dtype.names)
     for column, (dtype, _) in hipstars.dtype.fields.items():
         if column not in common:
