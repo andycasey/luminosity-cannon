@@ -81,18 +81,170 @@ class PendulumModel(model.BaseModel):
         # For each star, fit the equivalent widths.
 
         N_stars, N_atomic_lines = self._fluxes.shape[0], atomic_wavelengths.size
-        equivalent_widths = np.nan * np.ones((N_stars, N_atomic_lines))
 
-        msg = "Measuring equivalent widths of {0} atomic lines in {1} stars:"\
-            .format(N_atomic_lines, N_stars)
-        with utils.ProgressBar(msg, kwargs.get("__progressbar", True)) as pb:
+        if False:
 
-            for i in range(N_stars):
-                pb.update(i, N_stars)
-                equivalent_widths[i, :] = _fit_absorption_profiles(
-                    self._wavelengths, self._fluxes[i, :],
-                    self._flux_uncertainties[i, :], atomic_wavelengths)
+            equivalent_widths = np.nan * np.ones((N_stars, N_atomic_lines))
 
+            msg = "Measuring equivalent widths of {0} atomic lines in {1} stars:"\
+                .format(N_atomic_lines, N_stars)
+            with utils.ProgressBar(msg, kwargs.get("__progressbar", True)) as pb:
+
+                for i in range(N_stars):
+                    pb.update(i, N_stars)
+                    equivalent_widths[i, :] = _fit_absorption_profiles(
+                        self._wavelengths, self._fluxes[i, :],
+                        self._flux_uncertainties[i, :], atomic_wavelengths)
+
+        else:
+            print("REMOVE ME I AM LOADING")
+            with open("tmp", "r") as fp:
+                equivalent_widths = pickle.load(fp)
+
+        equivalent_widths *= 1000.
+
+
+        element_names = ['FE_H',
+         'FE_H',
+         'FE_H',
+         'FE_H',
+         'FE_H',
+         'FE_H',
+         'FE_H',
+         'FE_H',
+         'FE_H',
+         'FE_H',
+         'MG_H',
+         'MG_H',
+         'MG_H',
+         'MG_H',
+         'MG_H',
+         'MG_H',
+         'MG_H',
+         'AL_H',
+         'AL_H',
+         'SI_H',
+         'SI_H',
+         'SI_H',
+         'SI_H',
+         'SI_H',
+         'SI_H',
+         'SI_H',
+         'SI_H',
+         'SI_H',
+         'K_H',
+         'K_H',
+         'CA_H',
+         'CA_H',
+         'CA_H',
+         'CA_H',
+         'TI_H',
+         'TI_H',
+         'TI_H',
+         'TI_H',
+         'TI_H',
+         'V_H',
+         'CRI_H',
+         'CRI_H',
+         'MN_H',
+         'MN_H',
+         'MN_H',
+         'CO_H',
+         'N_H',
+         'N_H',
+         'N_H',
+         'N_H',
+         'N_H',
+         'N_H',
+         'N_H',
+         'CU_H',
+         'NA_H',
+         'NA_H',
+         'S_H',
+         'S_H',
+         'S_H',
+         'S_H']
+
+        def show(index, element=None):
+            if element is None:
+                element = element_names[index]
+
+            if element in ("CRI_H", "CO_H"):
+                return None
+
+            fig, axes = plt.subplots(3)
+
+            axes[0].scatter(self._labels["TEFF"], equivalent_widths[:, index])
+            axes[0].set_xlabel("TEFF")
+            axes[1].scatter(self._labels["LOGG"], equivalent_widths[:, index])
+            axes[1].set_xlabel("LOGG")
+            axes[2].scatter(self._labels[element], equivalent_widths[:, index])
+            axes[2].set_xlabel(element)
+
+            fig, axes = plt.subplots(3)
+            rew = np.log10(equivalent_widths/atomic_wavelengths)
+
+            axes[0].scatter(self._labels["TEFF"], rew[:, index])
+            axes[0].set_xlabel("TEFF")
+            axes[1].scatter(self._labels["LOGG"], rew[:, index])
+            axes[1].set_xlabel("LOGG")
+            axes[2].scatter(self._labels[element], rew[:, index])
+            axes[2].set_xlabel(element)
+            
+
+            def f(xdata, a, b, c, d):
+                return np.dot([a, b, c, d], xdata)
+
+            #xdata = np.array([self._labels[n] for n in ("TEFF", "LOGG", "CA_H")])
+            xdata = np.array([
+                np.ones(len(self._labels)),
+                self._labels["TEFF"],
+                self._labels["LOGG"],
+                self._labels[element]
+                ])
+            ydata = equivalent_widths[:, index]
+
+            p_opt, p_cov = op.curve_fit(f, xdata, ydata,
+                p0=np.hstack([np.zeros(xdata.shape[0] - 1), 1]))
+
+            fig, ax = plt.subplots()
+            model = f(xdata, *p_opt)
+            scat = ax.scatter(ydata, model, c=self._labels["LOGG"])
+            plt.colorbar(scat)
+            ax.set_xlabel("Expected EW")
+            ax.set_ylabel("Inferred EW")
+
+            limits = [
+                min(ax.get_xlim()[0], ax.get_ylim()[0]),
+                max(ax.get_xlim()[1], ax.get_ylim()[1])
+            ]
+            ax.plot(limits, limits, c="#666666", zorder=-1)
+            ax.set_xlim(limits)
+            ax.set_ylim(limits)
+
+            difference = np.std(np.abs(model - ydata))
+            difference_percent = np.std(np.abs(model - ydata)/ydata) * 100
+            ax.set_title("{2} line at {3}: {0:.2f} ({1:.2f}\%)".format(difference,
+                difference_percent, element, atomic_wavelengths[index]))
+
+            return fig
+
+        for i in range(len(atomic_wavelengths)):
+            fig = show(i)
+            if fig is not None:
+                fig.savefig("atomic-{}.png".format(i))
+
+
+
+        raise a
+        # scale by wavelength
+
+        x = self._labels[element]
+
+        def f(p):
+            return np.dot(p, [self._labels["TEFF"], self._labels["LOGG"]])
+
+        op.curve_fit(f, rew)
 
         raise a
 
@@ -386,6 +538,10 @@ def _nll_single_kernel(sigma, wavelengths, fluxes, flux_uncertainties,
 
 def gaussian(x, mu, sigma, amplitude):
     return 1. - amplitude * np.exp(-(x - mu)**2 / (2. * sigma**2))
+
+
+
+
 
 
 if __name__ == "__main__":
