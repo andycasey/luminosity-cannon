@@ -7,6 +7,7 @@ __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import numpy as np
 import matplotlib as mpl
+from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 cmaps = {
@@ -46,7 +47,7 @@ cmaps = {
 def flux_residuals(model, parameter=None, percentile=False, linearise=True,
     mask=None, **kwargs):
 
-    fig, ax = mpl.pyplot.subplots()
+    fig, ax = plt.subplots()
 
     # Generate model fluxes at each trained point.
     indices, label_names = model._get_linear_indices(
@@ -95,7 +96,7 @@ def flux_residuals(model, parameter=None, percentile=False, linearise=True,
             interpolation="nearest", extent=[x[0], x[-1], y[0], y[-1]],
             cmap=cmap)
 
-    colorbar = mpl.pyplot.colorbar(image)
+    colorbar = plt.colorbar(image)
     label = kwargs.pop("colorbar_label", r"$\Delta{}F(\lambda)$")
     units = r" $[\%]$" if percentile else ""
     colorbar.set_label(label + units)
@@ -107,13 +108,10 @@ def flux_residuals(model, parameter=None, percentile=False, linearise=True,
     return fig
     
 
-def label_residuals(model, aux=None, **kwargs):
+def label_residuals(labels, expected, inferred, aux=None, **kwargs):
     """
     Plot the residuals between the inferred and expected labels with respect to
     some set of parameters.
-
-    :param model:
-        The trained model to plot residuals from.
 
     :param aux: [optional]
         The auxiliary label to colour the scatter points by.
@@ -122,21 +120,20 @@ def label_residuals(model, aux=None, **kwargs):
         str or None
     """
 
-    labels, expected, inferred = model.label_residuals
-
     N = len(labels)
     cols = np.ceil(N**0.5)
     rows = np.ceil(N / cols)
     cols, rows = map(int, (cols, rows))
 
-    fig, axes = mpl.pyplot.subplots(cols, rows)
+    fig, axes = plt.subplots(cols, rows)
     axes = np.array([axes]) if N == 1 else axes.flatten()
 
     kwds = {}
     if aux is not None:
-        kwds["c"] = model._labels[aux]
-        kwds["vmin"] = np.nanmin(model._labels[aux])
-        kwds["vmax"] = np.nanmax(model._labels[aux])
+        kwds["c"] = aux
+        kwds["vmin"] = np.nanmin(aux)
+        kwds["vmax"] = np.nanmax(aux)
+        kwds["cmap"] = "summer" # there never was one in the UK
 
     else:
         kwds["facecolor"] = "k"
@@ -160,7 +157,6 @@ def label_residuals(model, aux=None, **kwargs):
         ax.plot(limits, limits, c="#cccccc", zorder=-100)
         ax.set_xlim(limits)
         ax.set_ylim(limits)
-
         ax.xaxis.set_major_locator(MaxNLocator(5))
         ax.yaxis.set_major_locator(MaxNLocator(5))
 
@@ -169,13 +165,15 @@ def label_residuals(model, aux=None, **kwargs):
         ax.set_ylabel(label)
 
         # Title.
-        ax.set_title(r"$\mu$ / $\sigma$ $=$ {0:.2f} / {1:.2f}".format(
-            np.nanmean(residuals), np.nanstd(residuals)))
+        #ax.set_title(r"$\mu\,\,/\,\,\sigma\,\,=\,\,{0:.2f}\,\,/\,\,{1:.2f}$"\
+        #    .format(np.nanmean(residuals), np.nanstd(residuals)), fontsize=8)
+        ax.set_title("mu / sigma = {0:.2f} / {1:.2f}".format(
+            np.nanmean(residuals), np.nanstd(residuals)), fontsize=8)
 
     if aux is not None:
-        cbar = mpl.pyplot.colorbar(scat)
+        cbar = plt.colorbar(scat)
         cbar.set_label(aux)
-    
+
     for ax in axes[N:]:
         ax.set_visible(False)
 

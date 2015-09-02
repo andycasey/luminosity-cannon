@@ -396,9 +396,8 @@ class CannonModel(model.BaseModel):
                     unique_cv_label))
 
             # Create a model to use so we don't overwrite self.
-            model = self.__class__(
-                self._labels[training_set],
-                self._fluxes[training_set, :],
+            model = self.__class__(self._labels[training_set],
+                self._wavelengths, self._fluxes[training_set, :],
                 self._flux_uncertainties[training_set, :])
             model.train(label_vector_description, **kwargs)
 
@@ -459,8 +458,8 @@ class CannonModel(model.BaseModel):
             mask[i] = False
 
             # Create a model to use so we don't overwrite self.
-            model = self.__class__(self._labels[mask], self._fluxes[mask, :],
-                self._flux_uncertainties[mask, :])
+            model = self.__class__(self._labels[mask], self._wavelengths,
+                self._fluxes[mask, :], self._flux_uncertainties[mask, :])
             model.train(label_vector_description, **kwargs)
 
             # Solve for the one left out.
@@ -626,12 +625,16 @@ class CannonModel(model.BaseModel):
 
 
     @model.requires_training_wheels
-    def plot_label_residuals(self, **kwargs):
+    def plot_label_residuals(self, aux=None, **kwargs):
         """
         Plot the label residuals.
         """
 
-        return plot.label_residuals(self, **kwargs)
+        if aux is not None:
+            aux = self._labels[aux]
+        labels, expected, inferred = self.label_residuals
+
+        return plot.label_residuals(labels, expected, inferred, aux, **kwargs)
 
 
 def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
