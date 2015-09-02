@@ -16,7 +16,7 @@ from warnings import simplefilter
 import scipy.optimize as op
 from astropy.table import Table
 
-from . import (plot, utils)
+from . import (model, plot, utils)
 
 # Speak up.
 logging.basicConfig(level=logging.INFO, 
@@ -28,18 +28,7 @@ simplefilter("ignore", np.RankWarning)
 simplefilter("ignore", RuntimeWarning)
 
 
-def requires_training_wheels(f):
-    """
-    A decorator for CannonModel functions where the model needs training first.
-    """
-    def wrapper(model, *args, **kwargs):
-        if not model._trained:
-            raise TypeError("the model needs training first")
-        return f(model, *args, **kwargs)
-    return wrapper
-
-
-class CannonModel(object):
+class CannonModel(model.BaseModel):
 
     def __init__(self, labels, fluxes, flux_uncertainties, verify=True):
         """
@@ -67,59 +56,8 @@ class CannonModel(object):
             :class:`np.ndarray`
         """
 
-        self._check_data(labels, fluxes, flux_uncertainties)
-        self._wavelengths = None
-        self._trained = False
-        self._labels = labels
-        self._label_vector_description = None
-        self._fluxes, self._flux_uncertainties = fluxes, flux_uncertainties
-
-        if verify:
-            self._check_forbidden_label_characters("^*")
-        return None
-
-
-    def _check_data(self, labels, fluxes, flux_uncertainties):
-        """
-        Check that the labels, flux and flux uncertainty data is OK.
-
-        :param labels:
-            A table with columns as labels, and stars as rows.
-
-        :type labels:
-            :class:`~astropy.table.Table`
-
-        :param fluxes:
-            An array of fluxes for each star as shape (num_stars, num_pixels).
-            The num_stars should match the rows in `labels`.
-
-        :type fluxes:
-            :class:`np.ndarray`
-
-        :param flux_uncertainties:
-            An array of 1-sigma flux uncertainties for each star as shape
-            (num_stars, num_pixels). The shape of the `flux_uncertainties` array
-            should match the `fluxes` array. 
-
-        :type flux_uncertainties:
-            :class:`np.ndarray`
-        """
-
-        fluxes = np.atleast_2d(fluxes)
-        flux_uncertainties = np.atleast_2d(flux_uncertainties)
-
-        if len(labels) != fluxes.shape[0]:
-            raise ValueError("the fluxes should have shape (n_stars, n_pixels) "
-                "where n_stars is the number of rows in the labels array")
-
-        if fluxes.shape != flux_uncertainties.shape:
-            raise ValueError("the flux and flux uncertainties array should have"
-                " the same shape")
-
-        if len(labels) == 0:
-            raise ValueError("no stars (labels) given")
-
-        return None
+        super(self.__class__, self).__init__(labels, fluxes, flux_uncertainties,
+            verify=verify)
 
 
     def train(self, label_vector_description, N=None, limits=None, pivot=False,
@@ -176,6 +114,10 @@ class CannonModel(object):
             .format(N_stars, N_pixels)
         for i in utils.progressbar(range(N_pixels),
             message=pb_mesg, size=N_pixels if pb_show else -1):
+
+            if np.isfinite(self._fluxes[use, i] \
+                * self._flux_uncertainties[use, i]).sum() == 0:
+                continue
 
             coefficients[i, :], scatter[i] = _fit_pixel(
                 self._fluxes[use, i], self._flux_uncertainties[use, i], lva,
@@ -241,7 +183,7 @@ class CannonModel(object):
         return indices
 
 
-    @requires_training_wheels
+    @model.requires_training_wheels
     def predict(self, labels=None, **labels_as_kwargs):
         """
         Predict spectra from the trained model, given the labels.
@@ -287,7 +229,7 @@ class CannonModel(object):
             label_vector_indices, labels).T).flatten()
 
 
-    @requires_training_wheels
+    @model.requires_training_wheels
     def solve_labels(self, flux, flux_uncertainties, **kwargs):
         """
         Solve the labels for given fluxes (and uncertainties) using the trained
@@ -371,7 +313,7 @@ class CannonModel(object):
 
 
     @property
-    @requires_training_wheels
+    @model.requires_training_wheels
     def label_residuals(self):
         """
         Calculate the residuals of the inferred labels using the trained model.
@@ -410,7 +352,7 @@ class CannonModel(object):
         return self._residuals_cache
 
 
-    @requires_training_wheels
+    @model.requires_training_wheels
     def cross_validate(self, label_vector_description=None, **kwargs):
         """
         Perform leave-one-out cross-validation on the trained model.
@@ -470,32 +412,6 @@ class CannonModel(object):
                     expected_test_labels[i, j] = self._labels[~mask][name]
                 
         return (label_names, elxpected_test_labels, inferred_test_labels)
-
-
-    def _check_forbidden_label_characters(self, characters):
-        """
-        Check the label table for potentially forbidden characters.
-
-        :param characters:
-            A string of forbidden characters.
-
-        :type characters:
-            str
-
-        :returns:
-            True
-
-        :raises ValueError:
-            If a forbidden character is in a potential label name.
-        """
-
-        for column in self._labels.dtype.names:
-            for character in characters:
-                if character in column:
-                    raise ValueError("forbidden character '{0}' is in potential"
-                        " label '{1}' - to ignore this use verify=False".format(
-                            character, column))
-        return True
 
 
     def _parse_label_vector_description(self, label_vector_description,
@@ -613,7 +529,7 @@ class CannonModel(object):
         return " + ".join(string)
 
 
-    @requires_training_wheels
+    @model.requires_training_wheels
     def save(self, filename, overwrite=False, verify=True):
         """
         Save the (trained) model to disk. This will save the label vector
@@ -704,7 +620,7 @@ class CannonModel(object):
         return True
 
 
-    @requires_training_wheels
+    @model.requires_training_wheels
     def plot_flux_residuals(self, parameter=None, percentile=False, **kwargs):
         """
         Plot the flux residuals as a function of an optional parameter or label.
