@@ -40,9 +40,9 @@ def hipparcos_hrd(data_table="../../data/APOGEE-Hipparcos.fits.gz"):
     stars = fits.open(data_table)[1].data
 
     fig, ax = plt.subplots()
-    kwds = {}
-    kwds.update(SCATTER_KWDS)
-    ax.scatter(stars["TEFF"], stars["LOGG"], **kwds)
+    ax.errorbar(stars["TEFF"], stars["LOGG"], xerr=stars["TEFF_ERR"],
+        yerr=stars["LOGG_ERR"], **ERRORBAR_KWDS)
+    ax.scatter(stars["TEFF"], stars["LOGG"], **SCATTER_KWDS)
 
     # Axes and labels.
     ax.set_xlabel(r"$T_{\rm eff}$ $[{\rm K}]$")
