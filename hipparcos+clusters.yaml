@@ -1,0 +1,21 @@
+data:
+  - "data/APOGEE/Sel_Clusters/*/*.fits"
+  - "data/APOGEE/aspCap/HIP*.fits"
+
+label_vector_description: "K_ABS^3 K_ABS^2 K_ABS*TEFF K_ABS*LOGG K_ABS*PARAM_M_H K_ABS*PARAM_ALPHA_M K_ABS TEFF LOGG PARAM_M_H PARAM_ALPHA_M TEFF^2 TEFF*LOGG TEFF*PARAM_M_H TEFF*PARAM_ALPHA_M LOGG^2 LOGG*PARAM_M_H LOGG*PARAM_ALPHA_M PARAM_M_H^2 PARAM_M_H*PARAM_ALPHA_M TEFF^3 LOGG^3"
+
+qc:
+  # Physically reasonable range
+  - '(stars["TEFF"] > 0)  * (6000 > stars["TEFF"])'
+  # No dodgyness
+  - 'stars["ASPCAPFLAG"] == 0'
+  # Less than 10% parallax error (if it is a Hipparcos star) and small scatter in Hp magnitude
+  - '(stars["HIP"] < 0) + ((stars["e_Hpmag"] < 0.01) * (stars["Plx"] > 0) * (stars["e_Plx"]/stars["Plx"]) < 0.1)'
+  # Good photometry 
+  - '(stars["K"] > 4)'
+  # Dust estimate
+  #- '(stars["SFD_EBV"] > 0)'
+
+
+plot:
+  aux: K
