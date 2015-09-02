@@ -6,8 +6,8 @@
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
+import matplotlib as mpl
+from matplotlib.ticker import MaxNLocator
 
 cmaps = {
     "GnBu": [(0.90354479621438422, 0.96276816830915568, 0.88175317890503824),
@@ -46,7 +46,7 @@ cmaps = {
 def flux_residuals(model, parameter=None, percentile=False, linearise=True,
     mask=None, **kwargs):
 
-    fig, ax = plt.subplots()
+    fig, ax = mpl.pyplot.subplots()
 
     # Generate model fluxes at each trained point.
     indices, label_names = model._get_linear_indices(
@@ -95,7 +95,7 @@ def flux_residuals(model, parameter=None, percentile=False, linearise=True,
             interpolation="nearest", extent=[x[0], x[-1], y[0], y[-1]],
             cmap=cmap)
 
-    colorbar = plt.colorbar(image)
+    colorbar = mpl.pyplot.colorbar(image)
     label = kwargs.pop("colorbar_label", r"$\Delta{}F(\lambda)$")
     units = r" $[\%]$" if percentile else ""
     colorbar.set_label(label + units)
@@ -107,14 +107,12 @@ def flux_residuals(model, parameter=None, percentile=False, linearise=True,
     return fig
     
 
-def label_residuals(model, parameters, percent=False):
+def label_residuals(model, aux=None, percentile=False, **kwargs):
     """
     Plot the residuals between the inferred and expected labels with respect to
     some set of parameters.
     """
 
-    if isinstance(parameters, (str, unicode)):
-        parameters = [parameters]
 
     # x-axis: some parameter
     # y-axes: differences in inferred labels
@@ -124,22 +122,61 @@ def label_residuals(model, parameters, percent=False):
 
     labels, expected, inferred = model.label_residuals
 
-    N_labels, N_parameters = len(label_names), len(parameters)
+    N = len(labels)
+    cols = np.ceil(N**0.5)
+    rows = np.ceil(N / cols)
+    cols, rows = map(int, (cols, rows))
 
+    fig, axes = mpl.pyplot.subplots(cols, rows)
+    axes = np.array([axes]) if N == 1 else axes.flatten()
 
+    kwds = {}
+    if aux is not None:
+        kwds["c"] = model._labels[aux]
+        kwds["vmin"] = np.nanmin(model._labels[aux])
+        kwds["vmax"] = np.nanmax(model._labels[aux])
 
-    fig, axes = plt.subplots(N_labels, N_parameters)
-    for i, label in enumerate(labels):
-        for j, parameter in enumerate(parameters):
-            
-            ax = axes[i, j]
+    else:
+        kwds["facecolor"] = "k"
 
-            difference = inferred[:, i] - expected[:, i]
-            if percent: difference /= expected[:, i]
+    kwds.update(**kwargs)
 
-            ax.scatter(model._labels[parameter], difference, facecolor="k")
+    for i, (ax, label) in enumerate(zip(axes, labels)):
 
-            ax.set_xlabel(parameter)
-            ax.set_ylabel("Delta {}".format(label))
+        #residual = inferred[:, i] - expected[:, i]
+        #if percentile: residual *= 100./expected[:, i]
 
+        residuals = inferred[:, i] - expected[:, i]
+        scat = ax.scatter(expected[:, i], inferred[:, i], **kwds)
 
+        # Limits and lines.
+        limits = [
+            min([ax.get_xlim()[0], ax.get_ylim()[0]]),
+            max([ax.get_xlim()[1], ax.get_ylim()[1]])
+        ]
+        # Show a 1:1 line.
+        ax.plot(limits, limits, c="#cccccc", zorder=-100)
+        ax.set_xlim(limits)
+        ax.set_ylim(limits)
+
+        ax.xaxis.set_major_locator(MaxNLocator(5))
+        ax.yaxis.set_major_locator(MaxNLocator(5))
+
+        # Labels.
+        ax.set_xlabel(label)
+        ax.set_ylabel(label)
+
+        # Title.
+        ax.set_title(r"$\mu$ / $\sigma$ $=$ {0:.2f} / {1:.2f}".format(
+            np.nanmean(residuals), np.nanstd(residuals)))
+
+    if aux is not None:
+        cbar = mpl.pyplot.colorbar(scat)
+        cbar.set_label(aux)
+
+    fig.tight_layout()
+
+    for ax in axes[N:]:
+        ax.set_visible(False)
+
+    return fig

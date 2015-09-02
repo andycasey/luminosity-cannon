@@ -629,6 +629,14 @@ class CannonModel(model.BaseModel):
         return plot.flux_residuals(self, parameter, percentile, **kwargs)
 
 
+    @model.requires_training_wheels
+    def plot_label_residuals(self, **kwargs):
+        """
+        Plot the label residuals.
+        """
+
+        return plot.label_residuals(self, **kwargs)
+
 
 def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
     full_output=False):
