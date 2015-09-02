@@ -30,7 +30,14 @@ simplefilter("ignore", RuntimeWarning)
 
 class CannonModel(model.BaseModel):
 
-    def __init__(self, labels, fluxes, flux_uncertainties, verify=True):
+    _trained_attributes \
+        = ("_coefficients", "_scatter", "_offsets", "_label_vector_description")
+    _data_attributes \
+        = ("_labels", "_wavelengths", "_fluxes", "_flux_uncertainties")
+
+
+    def __init__(self, labels, wavelengths, fluxes, flux_uncertainties,
+        verify=True):
         """
         Initialise a Cannon model.
 
@@ -40,12 +47,18 @@ class CannonModel(model.BaseModel):
         :type labels:
             :class:`~astropy.table.Table`
 
+        :param wavelengths:
+            The common wavelength values of the pixels.
+
+        :type wavelengths:
+            :class:`~np.array`
+
         :param fluxes:
             An array of fluxes for each star as shape (num_stars, num_pixels).
             The num_stars should match the rows in `labels`.
 
         :type fluxes:
-            :class:`np.ndarray`
+            :class:`~np.ndarray`
 
         :param flux_uncertainties:
             An array of 1-sigma flux uncertainties for each star as shape
@@ -53,11 +66,11 @@ class CannonModel(model.BaseModel):
             should match the `fluxes` array. 
 
         :type flux_uncertainties:
-            :class:`np.ndarray`
+            :class:`~np.ndarray`
         """
 
         super(self.__class__, self).__init__(labels, fluxes, flux_uncertainties,
-            verify=verify)
+            wavelengths=wavelengths, verify=verify)
 
 
     def train(self, label_vector_description, N=None, limits=None, pivot=False,
@@ -130,18 +143,6 @@ class CannonModel(model.BaseModel):
             = coefficients, scatter, offsets, True
 
         return (coefficients, scatter, offsets)
-
-
-    @property
-    def _trained_hash(self):
-        """
-        Return a hash of the trained state.
-        """
-
-        if not self._trained: return None
-        args = (self._coefficients, self._scatter, self._offsets,
-            self._label_vector_description)
-        return "".join([str(hash(str(each)))[:10] for each in args])
 
 
     def _get_linear_indices(self, label_vector_description, full_output=False):
@@ -385,7 +386,8 @@ class CannonModel(model.BaseModel):
             = map(len, (label_names, self._labels, unique_cv_labels))
         cross_validated_labels = np.nan * np.ones((N_stars, N_labels))
 
-        for i, unique_cv_label in enumerate(unique_cv_labels):
+        # [TODO] Thread this
+        for n, unique_cv_label in enumerate(unique_cv_labels, start=1):
 
             # Identify which stars belong to the training set and which belong
             # to the testing set.
@@ -394,7 +396,7 @@ class CannonModel(model.BaseModel):
 
             logger.info("Doing cross-validation realisation {0}/{1} on a test "\
                 "set containing {2} stars with {3} = {4}".format(
-                    i, N_realisations, testing_set.sum(), cv_label, 
+                    n, N_realisations, testing_set.sum(), cv_label, 
                     unique_cv_label))
 
             # Create a model to use so we don't overwrite self.
@@ -600,97 +602,6 @@ class CannonModel(model.BaseModel):
                 string.append(sub_string[0])
 
         return " + ".join(string)
-
-
-    @model.requires_training_wheels
-    def save(self, filename, overwrite=False, verify=True):
-        """
-        Save the (trained) model to disk. This will save the label vector
-        description, the optimised coefficients and scatter, and pivot offsets.
-
-        :param filename:
-            The file path where to save the model to.
-
-        :type filename:
-            str
-
-        :param overwrite: [optional]
-            Overwrite the existing file path, if it already exists.
-
-        :type overwrite:
-            bool
-
-        :returns:
-            True
-
-        :raise TypeError:
-            If the model has not been trained, since there is nothing to save.
-        """
-
-        # Create a hash of the labels, fluxes and flux uncertainties.
-        if verify:
-            hashes = [hash(str(_)) for _ in \
-                (self._labels, self._fluxes, self._flux_uncertainties)]
-        else:
-            hashes = None
-
-        contents = \
-            (self._label_vector_description, self._coefficients, self._scatter,
-                self._offsets, hashes)
-        with open(filename, "w") as fp:
-            pickle.dump(contents, fp, -1)
-
-        return True
-
-
-    def load(self, filename, verify=True):
-        """
-        Load a trained model from disk.
-
-        :param filename:
-            The file path where to load the model from.
-
-        :type filename:
-            str
-
-        :param verify: [optional]
-            Verify whether the hashes in the stored filename match what is
-            expected from the label, flux and flux uncertainty arrays.
-
-        :type verify:
-            bool
-
-        :returns:
-            True
-
-        :raises IOError:
-            If the model could not be loaded.
-
-        :raises ValueError:
-            If the current hash of the labels, fluxes, or flux uncertainties is
-            different than what was stored in the filename. Disable this option
-            (at your own risk) by setting `verify` to False.
-        """
-
-        with open(filename, "r") as fp:
-            contents = pickle.load(fp)
-
-        hashes = contents[-1]
-        if verify and hashes is not None:
-            exp_hash = [hash(str(_)) for _ in \
-                (self._labels, self._fluxes, self._flux_uncertainties)]
-            descriptions = ("labels", "fluxes", "flux_uncertainties")
-            for e_hash, r_hash, descr in zip(exp_hash, hashes, descriptions):
-                if e_hash != r_hash:
-                    raise ValueError("expected hash for {0} ({1}) is different "
-                        "to that stored in {2} ({3})".format(descr, e_hash,
-                            filename, r_hash)) 
-
-        self._label_vector_description, self._coefficients, self._scatter, \
-            self._offsets, hashes = contents
-        self._trained = True
-
-        return True
 
 
     @model.requires_training_wheels
