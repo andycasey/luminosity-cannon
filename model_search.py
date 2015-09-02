@@ -24,9 +24,10 @@ def random_word():
 
 
 # Setup 
-RELOAD = False
-OUTPUT_DIR = "model_search"
-FILENAME_PREFIX = "test-Cannon"
+RELOAD = True
+OUTPUT_DIR = "model_search2"
+OUTPUT_FILENAME = "data/APOGEE-Hipparcos-results.fits.gz"
+FILENAME_PREFIX = "data/APOGEE-Hipparcos"
 
 stars = Table.read("{}.fits.gz".format(FILENAME_PREFIX))
 fluxes = np.memmap("{}-flux.memmap".format(FILENAME_PREFIX), mode="r",
@@ -92,7 +93,7 @@ stars["ILOGG"] = np.array(np.argsort(stars["LOGG"]), dtype=float)
 stars["IPARAM_M_H"] = np.array(np.argsort(stars["PARAM_M_H"]), dtype=float)
 stars["IPARAM_ALPHA_M"] = np.array(np.argsort(stars["PARAM_ALPHA_M"]), dtype=float)
 
-label_vector_descriptions = [
+"""
     "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2  TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^3 K_ABS^2 K_ABS JmK_ABS^5 JmK_ABS^4 JmK_ABS^3 JmK_ABS^2 JmK_ABS JmK_ABS^2*K_ABS JmK_ABS*K_ABS^2 JmK_ABS*K_ABS ", 
     "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2  TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^5 JmK_ABS^4 JmK_ABS^3 JmK_ABS^2 JmK_ABS JmK_ABS^2*K_ABS JmK_ABS*K_ABS^2 JmK_ABS*K_ABS ", 
     "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2  TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^3 K_ABS^2 K_ABS JmK_ABS^3 JmK_ABS^2 JmK_ABS JmK_ABS^2*K_ABS JmK_ABS*K_ABS^2 JmK_ABS*K_ABS ", 
@@ -104,9 +105,12 @@ label_vector_descriptions = [
     "TEFF^2 TEFF LOGG LOGG^2  TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS", 
     "TEFF LOGG LOGG^2  TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS", 
     "TEFF LOGG TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS", 
+"""
+label_vector_descriptions = [
 
     "TEFF LOGG TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS", 
     #"TEFF LOGG TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS K_ABS JmK_ABS JmK_ABS JmK_ABS*K_ABS", 
+    "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2 TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^3 K_ABS^2 K_ABS JmK_ABS^5 JmK_ABS^4 JmK_ABS^3 JmK_ABS^2 JmK_ABS JmK_ABS^2*K_ABS JmK_ABS*K_ABS^2 JmK_ABS*K_ABS" 
 
 ]
 
@@ -133,6 +137,28 @@ for i, label_vector_description in enumerate(label_vector_descriptions):
 
     # Calculate residuals.
     labels, expected, inferred = model.label_residuals
+
+    # Calculate expected distance and inferred distance.
+    stars["D_expected_mu"] = 1000./stars["Plx"] # Parsecs
+
+    # Calculate distances.
+    distance_labels = []
+    for label in labels:
+        if label.rstrip("_ABS") in magnitudes:
+            distance_labels.append(label[:-4])
+
+    for label in distance_labels:
+        #gs = matplotlib.gridspec.GridSpec(2, 1, height_ratios=[1, 4])
+        #ax = map(plt.subplot, gs)
+        mu = stars[label] - inferred[:, list(labels).index("{}_ABS".format(label))]
+        inferred_distance = 10**((5 + mu)/5.) # Parsecs
+
+        stars["D_inferred_{}".format(label)] = inferred_distance
+        stars["Plx_inferred_{}".format(label)] = 1000./inferred_distance
+
+    stars.write(OUTPUT_FILENAME, overwrite=True)
+    print("Created {}".format(OUTPUT_FILENAME))
+
 
     # Plot residuals.
     fig, axes = plt.subplots(2, int(np.ceil(len(labels)/2.)))

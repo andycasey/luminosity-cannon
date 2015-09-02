@@ -14,9 +14,10 @@ from code.cannon import CannonModel
 
 
 SHOW_AS_PERCENT = True
+OUTPUT_FILENAME = "data/APOGEE-All_Clusters-results.fits.gz"
     
-DATA_PREFIX = "data/APOGEE-Clusters"
-LABEL_VECTOR_DESCRIPTION = "TEFF LOGG LOGG^2 TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS"
+DATA_PREFIX = "data/APOGEE-All_Clusters"
+#LABEL_VECTOR_DESCRIPTION = "TEFF LOGG LOGG^2 TEFF*LOGG PARAM_M_H PARAM_M_H*TEFF PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^2 K_ABS JmK_ABS^2 JmK_ABS JmK_ABS*K_ABS"
 LABEL_VECTOR_DESCRIPTION = "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2 TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^3 K_ABS^2 K_ABS JmK_ABS^5 JmK_ABS^4 JmK_ABS^3 JmK_ABS^2 JmK_ABS JmK_ABS^2*K_ABS JmK_ABS*K_ABS^2 JmK_ABS*K_ABS" 
 
 if __name__ == "__main__":
@@ -46,10 +47,12 @@ if __name__ == "__main__":
     #ok = np.array((stars["e_Hpmag"] < 0.01) * np.isfinite(stars["J"] * stars["H"] * stars["K"]) \
     #    * (stars["Plx"] > 0) * (stars["e_Plx"]/stars["Plx"] < 0.1) * (stars["K_ERR"] < 0.10))
 
-    stars = stars[ok]
-    fluxes = fluxes[ok]
-    flux_uncertainties = flux_uncertainties[ok]
     """
+    ok = (stars["TEFF"] > 0) * np.isfinite(stars["J"] * stars["H"] * stars["K"]) * (stars["K_ERR"] < 0.10)
+    stars = stars[ok]
+    fluxes = fluxes[ok, :]
+    flux_uncertainties = flux_uncertainties[ok, :]
+    
     model = CannonModel(stars, fluxes, flux_uncertainties)
     #print("LOADING")
     #model.load("tmp")
@@ -57,6 +60,29 @@ if __name__ == "__main__":
     
     # Calculate residuals.
     labels, expected, inferred = model.label_residuals
+
+    # Calculate expected distance and inferred distance.
+    stars["D_expected_mu"] = 10**((5 + stars["mu"])/5.) / 1000. # [kpc]
+
+    # Calculate distances.
+    distance_labels = []
+    for label in labels:
+        if label.rstrip("_ABS") in magnitudes:
+            distance_labels.append(label[:-4])
+
+    for label in distance_labels:
+        gs = matplotlib.gridspec.GridSpec(2, 1, height_ratios=[1, 4])
+        ax = map(plt.subplot, gs)
+
+        expected_distance = 10**((5 + stars["mu"])/5.) / 1000. # [kpc]
+        mu = stars[label] - inferred[:, list(labels).index("{}_ABS".format(label))]
+        inferred_distance = 10**((5 + mu)/5.) / 1000. # [kpc]
+
+        stars["D_inferred_{}".format(label)] = inferred_distance
+
+    stars.write(OUTPUT_FILENAME)
+    print("Created {}".format(OUTPUT_FILENAME))
+
 
     # Plot residuals.
     fig, axes = plt.subplots(2, int(np.ceil(len(labels)/2.)))
