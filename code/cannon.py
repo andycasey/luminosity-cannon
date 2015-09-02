@@ -353,6 +353,79 @@ class CannonModel(model.BaseModel):
 
 
     @model.requires_training_wheels
+    def cross_validate_by_label(self, cv_label, label_vector_description=None,
+        **kwargs):
+        """
+        Group stars together by some unique label, then perform cross-validation
+        on each group.
+
+        :param cv_label:
+            The label to use to group stars together (e.g., FIELD).
+
+        :type cv_label:
+            str
+
+        :params label_vector_description: [optional]
+            The human-readable form of the label vector description. If None is
+            given, the currently trained label vector description is used.
+
+        :type label_vector_description:
+            str    
+        """
+
+        if label_vector_description is None:
+            label_vector_description = self._label_vector_description
+
+        label_indices, label_names = self._get_linear_indices(
+            label_vector_description, full_output=True)
+
+        # Group stars by their distinctive label.
+        unique_cv_labels = set(self._labels[cv_label])
+        N_labels, N_stars, N_realisations \
+            = map(len, (label_names, self._labels, unique_cv_labels))
+        cross_validated_labels = np.nan * np.ones((N_stars, N_labels))
+
+        for i, unique_cv_label in enumerate(unique_cv_labels):
+
+            # Identify which stars belong to the training set and which belong
+            # to the testing set.
+            testing_set = self._labels[cv_label] == unique_cv_label
+            training_set = ~testing_set
+
+            logger.info("Doing cross-validation realisation {0}/{1} on a test "\
+                "set containing {2} stars with {3} = {4}".format(
+                    i, N_realisations, testing_set.sum(), cv_label, 
+                    unique_cv_label))
+
+            # Create a model to use so we don't overwrite self.
+            model = self.__class__(
+                self._labels[training_set],
+                self._fluxes[training_set, :],
+                self._flux_uncertainties[training_set, :])
+            model.train(label_vector_description, **kwargs)
+
+            # Solve for the stars in the testing set.
+            for j, index in enumerate(np.where(testing_set)[0]):
+                try:
+                    inferred_labels = model.solve_labels(self._fluxes[index, :],
+                        self._flux_uncertainties[index, :])
+                except:
+                    logger.exception("Exception in solving star with index {0}"
+                        " in cross-validation set with {1} = {2}".format(index,
+                            cv_label, unique_cv_label))
+                else:
+                    for k, name in enumerate(label_names):
+                        cross_validated_labels[index, k] = inferred_labels[name]
+
+        # Get the expected label names.
+        expected_labels = np.nan * np.ones(cross_validated_labels.shape)
+        for k, name in enumerate(label_names):
+            expected_labels[:, k] = self._labels[name]
+
+        return (label_names, expected_labels, cross_validated_labels)
+
+
+    @model.requires_training_wheels
     def cross_validate(self, label_vector_description=None, **kwargs):
         """
         Perform leave-one-out cross-validation on the trained model.
@@ -411,7 +484,7 @@ class CannonModel(model.BaseModel):
                 for j, name in enumerate(label_names):
                     expected_test_labels[i, j] = self._labels[~mask][name]
                 
-        return (label_names, elxpected_test_labels, inferred_test_labels)
+        return (label_names, expected_test_labels, inferred_test_labels)
 
 
     def _parse_label_vector_description(self, label_vector_description,
