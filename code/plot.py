@@ -107,18 +107,20 @@ def flux_residuals(model, parameter=None, percentile=False, linearise=True,
     return fig
     
 
-def label_residuals(model, aux=None, percentile=False, **kwargs):
+def label_residuals(model, aux=None, **kwargs):
     """
     Plot the residuals between the inferred and expected labels with respect to
     some set of parameters.
+
+    :param model:
+        The trained model to plot residuals from.
+
+    :param aux: [optional]
+        The auxiliary label to colour the scatter points by.
+
+    :type aux:
+        str or None
     """
-
-
-    # x-axis: some parameter
-    # y-axes: differences in inferred labels
-
-    #indices, label_names = model._get_linear_indices(
-    #    model._label_vector_description, full_output=True)
 
     labels, expected, inferred = model.label_residuals
 
@@ -173,9 +175,7 @@ def label_residuals(model, aux=None, percentile=False, **kwargs):
     if aux is not None:
         cbar = mpl.pyplot.colorbar(scat)
         cbar.set_label(aux)
-
-    fig.tight_layout()
-
+    
     for ax in axes[N:]:
         ax.set_visible(False)
 

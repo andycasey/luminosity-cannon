@@ -5,12 +5,8 @@
 
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
-import cPickle as pickle
 import logging
 import numpy as np
-import random
-from itertools import chain, combinations
-from math import factorial
 from warnings import simplefilter
 
 import scipy.optimize as op

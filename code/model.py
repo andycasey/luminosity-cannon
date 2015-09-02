@@ -5,7 +5,9 @@
 
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
+import cPickle as pickle
 import numpy as np
+import os
 
 def requires_training_wheels(f):
     """
