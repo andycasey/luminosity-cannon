@@ -13,8 +13,10 @@
 *.pkl
 *.fits
 *.fits.*
+*.gz
 
+*.eps
 *.png
 
-model_search/
+stash/
 data/
