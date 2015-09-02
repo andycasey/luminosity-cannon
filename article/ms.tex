@@ -1,5 +1,6 @@
 \documentclass[useAMS,usenatbib]{mn2e}
 
+\usepackage{graphicx}
 
 \title[Inferring absolute stellar luminosities]{A probabilistic model for 
     inferring absolute stellar luminosities from spectra}
@@ -58,17 +59,57 @@ publicly announce a comparison once \textit{Gaia} parallaxes are made available,
 
 \section[]{Data}
 
-\section[]{Toy Model?}
+% Different ways of doing this:
+% Hipparcos, Clusters
+% Overlap with existing surveys.
 
-\section[]{Methods}
+% APOGEE has most. Probably best to test this with.
 
-\section[]{Discussion}
+% Use GES data for matching to SDSS-like stuff.
+
+
+\begin{figure}
+\includegraphics[width=0.5\textwidth]{figures/hipparcos-hrd.eps}
+\caption{Hipparcos HRD \label{fig:hipparcos-hrd}}
+\end{figure}
+
+
+
+\begin{figure}
+\includegraphics[width=0.5\textwidth]{figures/hipparcos-plx.eps}
+\caption{Hipparcos plx \label{fig:hipparcos-plx}}
+\end{figure}
+
+
+    
+
+\begin{figure*}
+\includegraphics[width=\textwidth]{figures/cluster-hrds.eps}
+\caption{Hipparcos plx \label{fig:cluster-hrds}}
+\end{figure*}
+
+
+
+\begin{figure}
+\includegraphics[width=\textwidth]{figures/cluster-distances.eps}
+\caption{Hipparcos plx \label{fig:cluster-distances}}
+\end{figure}
+
+
+\section{Model}
+
+\section{Discussion}
 
 \section{Conclusions}
 
 
 \section*{Acknowledgments}
-This research was fostered by discussions at the \textit{New Milky Way} conference hosted by the Munich Institute for Astro- and Particle Physics, and the \textit{Stellar Streams in the Local Universe} conference hosted at Ringberg Castle by the Max-Planck-Institut F\"ur Astronomie. This research made use of Astropy, a community-developed core Python package for Astronomy \citep{astropy}.
+This research was funded in part through 
+This research was fostered by discussions at the \textit{New Milky Way} 
+conference hosted by the Munich Institute for Astro- and Particle Physics, and 
+the \textit{Stellar Streams in the Local Universe} conference hosted at Ringberg
+Castle by the Max-Planck-Institut F\"ur Astronomie. This research made use of 
+Astropy, a community-developed core Python package for Astronomy \citep{astropy}.
 
 \begin{thebibliography}{99}
 %\bibitem[\protect\citeauthoryear{Baird}{1981}]{b1} Baird S.R., 1981,

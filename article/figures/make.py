@@ -6,6 +6,7 @@
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import matplotlib
+from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import MaxNLocator
 from astropy.io import fits
 
@@ -238,7 +239,7 @@ def inferred_distance(filename="../../data/APOGEE-All_Clusters-results.fits.gz",
     figures = []
     for label in dist_labels:
 
-        gs = matplotlib.gridspec.GridSpec(2, 1, height_ratios=[1, 4])
+        gs = GridSpec(2, 1, height_ratios=[1, 4])
         ax_diff, ax_relation = map(plt.subplot, gs)
 
         scatter_kwds = {}
@@ -427,11 +428,11 @@ if __name__ == "__main__":
     from collections import OrderedDict
     
     FIGURES = {
-        "figure-1": hipparcos_hrd,
-        "figure-2": inferred_parallax,
-        "figure-3": cluster_hrds,
+        "hipparcos-hrd": hipparcos_hrd,
+        "hipparcos-plx": inferred_parallax,
+        "cluster-hrds": cluster_hrds,
         "tmp-cluster-members": cluster_members,
-        "figure-4": inferred_distance
+        "cluster-distances": inferred_distance
     }
 
     for filename_prefix, function in FIGURES.items():
@@ -439,17 +440,17 @@ if __name__ == "__main__":
         if isinstance(fig, list) and len(fig) > 1:
             for i, f in enumerate(fig):
                 f.savefig("{}.png".format(filename_prefix), dpi=300)
-                f.savefig("{}.pdf".format(filename_prefix), dpi=300)
+                f.savefig("{}.eps".format(filename_prefix), dpi=300)
     
         elif isinstance(fig, list):
             fig = fig[0]
             fig.savefig("{}.png".format(filename_prefix), dpi=300)
-            fig.savefig("{}.pdf".format(filename_prefix), dpi=300)
+            fig.savefig("{}.eps".format(filename_prefix), dpi=300)
     
         else:
             fig.savefig("{}.png".format(filename_prefix), dpi=300)
-            fig.savefig("{}.pdf".format(filename_prefix), dpi=300)
+            fig.savefig("{}.eps".format(filename_prefix), dpi=300)
 
-        print("Created {0}.png and {0}.pdf".format(filename_prefix))
+        print("Created {0}.png and {0}.eps".format(filename_prefix))
 
 

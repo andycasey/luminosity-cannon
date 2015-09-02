@@ -1,4 +1,5 @@
 filename=ms
+driver=latex
 
 pdf: ps
 	ps2pdf ${filename}.ps
@@ -17,10 +18,11 @@ ps:	dvi
 	dvips -t letter ${filename}.dvi
 
 dvi:
-	latex ${filename}
+	${driver} ${filename}
+	dvipdfm ${filename}
 	bibtex ${filename}||true
-	latex ${filename}
-	latex ${filename}
+	${driver} ${filename}
+	${driver} ${filename}
 
 read:
 	evince ${filename}.pdf &
