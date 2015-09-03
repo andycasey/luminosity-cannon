@@ -56,6 +56,12 @@ CLUSTER_DISTANCES = {
     "N7789": (2337.0, np.nan, "2005A&A...438.1163K")
 }
 
+R = {
+    "J": 0.717,
+    "H": 0.464,
+    "K": 0.306,
+}
+
 
 
 def data_paths(config):
@@ -141,11 +147,6 @@ def match_spectra(filenames, photometric_filters=("J", "H", "K")):
     stars["SFD_EBV"][stars["SFD_EBV"] < 0] = 0
     print("Setting E(B-V) = 0 if not known")
 
-    R = {
-        "J": 0.717,
-        "H": 0.464,
-        "K": 0.306,
-    }
     for pf in photometric_filters:
         stars["{}_ABS".format(pf)] = \
             stars[pf] - mu - stars["SFD_EBV"] * R.get(pf, 0)
@@ -217,7 +218,10 @@ if __name__ == "__main__":
     for i, pf in enumerate(filters):
 
         expected_distance = 10**((5 + model._labels["mu"])/5.) / 1000. # [kpc]
-        mu = model._labels[pf] - inferred[:, list(labels).index("{}_ABS".format(pf))]
+        mu = model._labels[pf] \
+            - inferred[:, list(labels).index("{}_ABS".format(pf))] \
+            - model._labels["SFD_EBV"] * R.get(pf, 0)
+
         inferred_distance = 10**((5 + mu)/5.) / 1000. # [kpc]
         residual_distance = inferred_distance - expected_distance
         difference_absolute = residual_distance
@@ -272,8 +276,9 @@ if __name__ == "__main__":
 
             expected_plx = model._labels["Plx"]
             inferred_mu = model._labels[pf] \
-                - inferred[:, list(labels).index("{}_ABS".format(pf))]
-            # TODO: Dust?
+                - inferred[:, list(labels).index("{}_ABS".format(pf))] \
+                - model._labels["SFD_EBV"] * R.get(pf, 0)
+
             inferred_plx = 1000./(10**((5 + inferred_mu)/5.))
 
             ax.errorbar(expected_plx, inferred_plx, model._labels["e_Plx"],
@@ -333,7 +338,10 @@ if __name__ == "__main__":
         for i, pf in enumerate(filters):
 
             expected_distance = 10**((5 + model._labels["mu"])/5.) / 1000. # [kpc]
-            mu = model._labels[pf] - inferred[:, list(labels).index("{}_ABS".format(pf))]
+            mu = model._labels[pf] \
+                - inferred[:, list(labels).index("{}_ABS".format(pf))] \
+                - model._labels["SFD_EBV"] * R.get(pf, 0)
+
             inferred_distance = 10**((5 + mu)/5.) / 1000. # [kpc]
             residual_distance = inferred_distance - expected_distance
             difference_absolute = residual_distance
@@ -386,8 +394,9 @@ if __name__ == "__main__":
 
                 expected_plx = model._labels["Plx"]
                 inferred_mu = model._labels[pf] \
-                    - inferred[:, list(labels).index("{}_ABS".format(pf))]
-                # TODO: Dust?
+                    - inferred[:, list(labels).index("{}_ABS".format(pf))] \
+                    - stars["SFD_EBV"] * R.get(pf, 0)
+
                 inferred_plx = 1000./(10**((5 + inferred_mu)/5.))
 
                 ax.errorbar(expected_plx, inferred_plx, model._labels["e_Plx"],
@@ -443,7 +452,9 @@ if __name__ == "__main__":
         for i, pf in enumerate(filters):
 
             expected_distance = 10**((5 + model._labels["mu"])/5.) / 1000. # [kpc]
-            mu = model._labels[pf] - inferred[:, list(labels).index("{}_ABS".format(pf))]
+            mu = model._labels[pf] \
+                - inferred[:, list(labels).index("{}_ABS".format(pf))] \
+                - model._labels["SFD_EBV"] * R.get(pf, 0)
             inferred_distance = 10**((5 + mu)/5.) / 1000. # [kpc]
             residual_distance = inferred_distance - expected_distance
             difference_absolute = residual_distance
@@ -496,8 +507,8 @@ if __name__ == "__main__":
 
                 expected_plx = model._labels["Plx"]
                 inferred_mu = model._labels[pf] \
-                    - inferred[:, list(labels).index("{}_ABS".format(pf))]
-                # TODO: Dust?
+                    - inferred[:, list(labels).index("{}_ABS".format(pf))] \
+                    - model._labels["SFD_EBV"] * R.get(pf, 0)
                 inferred_plx = 1000./(10**((5 + inferred_mu)/5.))
 
                 ax.errorbar(expected_plx, inferred_plx, model._labels["e_Plx"],
