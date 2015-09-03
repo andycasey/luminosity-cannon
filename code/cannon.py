@@ -7,22 +7,12 @@ __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import logging
 import numpy as np
-from warnings import simplefilter
-
 import scipy.optimize as op
 from astropy.table import Table
 
 from . import (model, plot, utils)
 
-# Speak up.
-logging.basicConfig(level=logging.INFO, 
-    format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("cannon")
-
-# Shut up.
-simplefilter("ignore", np.RankWarning)
-simplefilter("ignore", RuntimeWarning)
-
 
 class CannonModel(model.BaseModel):
 
@@ -452,7 +442,9 @@ class CannonModel(model.BaseModel):
         # Go through each combination.
         # [TODO] Thread everything.
         for i in range(N_realisations):
-
+            logger.info("Doing cross-validation realisation {0}/{1} on a test "\
+                "set containing 1 star".format(i + 1, N_realisations))
+            
             mask = np.ones(N_realisations, dtype=bool)
             mask[i] = False
 
