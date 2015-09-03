@@ -5,7 +5,7 @@
 
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
-
+import cPickle as pickle
 import glob
 import matplotlib
 import numpy as np
@@ -18,11 +18,11 @@ from code import cannon, plot
 
 
 OUTPUT_DIR = ""
-CONFIG_FILENAME = "hipparcos+clusters.yaml"
+CONFIG_FILENAME = "hipparcos_clusters.yaml"
 APOGEE_FILENAME = "APOGEE_xm_Hipparcos.fits.gz"
 
 LOCO_CV = True
-LOO_CV = False
+LOO_CV = True
 
 
 try:
@@ -303,15 +303,18 @@ if __name__ == "__main__":
     # Do cross-validation for each cluster.
     if LOCO_CV:
 
-
-        labels, expected, inferred = model.cross_validate_by_label("DESCR")
-        
         _ = os.path.join(OUTPUT_DIR, "{}-loco-cv.pkl".format(output_prefix))
-        with open(_, "wb") as fp:
-            pickle.dump((labels, expected, inferred), fp, -1)
-        print("Saved LOCO-CV results to {}".format(_))
+        if os.path.exists(_):
+            print("Loading LOCO-CV results from {}".format(_))
+            with open(_, "rb") as fp:
+                labels, expected, inferred = pickle.load(fp)
+        else:            
+            labels, expected, inferred = model.cross_validate_by_label("DESCR")
+            
+            with open(_, "wb") as fp:
+                pickle.dump((labels, expected, inferred), fp, -1)
+            print("Saved LOCO-CV results to {}".format(_))
         
-
         aux = config.get("plot", {}).get("aux", None)
         if aux is not None:
             aux = model._labels[aux]
@@ -320,21 +323,6 @@ if __name__ == "__main__":
         fig = plot.label_residuals(labels, expected, inferred, aux)
         fig.savefig(_)
         print("Created {}".format(_))
-
-        """
-        _ = os.path.join(OUTPUT_DIR, "{}-loco-cv.pkl".format(output_prefix))
-        with open(_, "rb") as fp:
-            labels, expected, inferred = pickle.load(fp)
-
-        aux = config.get("plot", {}).get("aux", None)
-        if aux is not None:
-            aux = model._labels[aux]
-        _ = os.path.join(OUTPUT_DIR, "{}-label-residuals-loco-cv.png".format(
-            output_prefix))
-        fig = plot.label_residuals(labels, expected, inferred, aux)
-        fig.savefig(_)
-        print("Created {}".format(_))
-        """
 
         # Using the cross-validated values, do expected distance vs inferred.
         filters = [_[:-4] for _ in labels if _.endswith("_ABS")]
@@ -425,7 +413,18 @@ if __name__ == "__main__":
 
     # Do cross-validation for individual stars.
     if LOO_CV:
-        labels, expected, inferred = model.cross_validate()
+
+        _ = os.path.join(OUTPUT_DIR, "{}-loo-cv.pkl".format(output_prefix))
+        if os.path.exists(_):
+            print("Loading LOO-CV results from {}".format(_))
+            with open(_, "rb") as fp:
+                labels, expected, inferred = pickle.load(fp)
+        else:            
+            labels, expected, inferred = model.cross_validate()
+            with open(_, "wb") as fp:
+                pickle.dump((labels, expected, inferred), fp, -1)
+            print("Saved LOO-CV results to {}".format(_))
+        
         aux = config.get("plot", {}).get("aux", None)
         if aux is not None:
             aux = model._labels[aux]
@@ -434,11 +433,6 @@ if __name__ == "__main__":
         fig = plot.label_residuals(labels, expected, inferred, aux)
         fig.savefig(_)
         print("Created {}".format(_))
-
-        _ = os.path.join(OUTPUT_DIR, "{}-loo-cv.pkl".format(output_prefix))
-        with open(_, "wb") as fp:
-            pickle.dump((labels, expected, inferred), fp, -1)
-        print("Saved LOO-CV results to {}".format(_))
 
         # Using the cross-validated values, do expected distance vs inferred.
         filters = [_[:-4] for _ in labels if _.endswith("_ABS")]
@@ -574,27 +568,3 @@ if __name__ == "__main__":
 
 # Plot results
 
-
-
-
-
-import os
-import random
-import numpy as np
-import matplotlib.pyplot as plt
-from astropy.table import Column, Table
-from code.cannon import CannonModel
-
-
-# Utilities.
-def random_word():
-    with open("/usr/share/dict/words", "r") as fp:
-        line = next(fp)
-        for num, aline in enumerate(fp):
-            if random.randrange(num + 2): continue
-            line = aline
-    return line.rstrip()
-
-
-# Setup 
-RELOAD = True
