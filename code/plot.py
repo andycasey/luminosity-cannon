@@ -108,7 +108,8 @@ def flux_residuals(model, parameter=None, percentile=False, linearise=True,
     return fig
     
 
-def label_residuals(labels, expected, inferred, aux=None, **kwargs):
+def label_residuals(labels, expected, inferred, aux=None, aux_label=None,
+    **kwargs):
     """
     Plot the residuals between the inferred and expected labels with respect to
     some set of parameters.
@@ -133,8 +134,7 @@ def label_residuals(labels, expected, inferred, aux=None, **kwargs):
         kwds["c"] = aux
         kwds["vmin"] = np.nanmin(aux)
         kwds["vmax"] = np.nanmax(aux)
-        kwds["cmap"] = "summer" # there never was one in the UK
-
+        
     else:
         kwds["facecolor"] = "k"
 
@@ -172,7 +172,7 @@ def label_residuals(labels, expected, inferred, aux=None, **kwargs):
 
     if aux is not None:
         cbar = plt.colorbar(scat)
-        cbar.set_label(aux)
+        cbar.set_label(aux_label or "")
 
     for ax in axes[N:]:
         ax.set_visible(False)

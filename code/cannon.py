@@ -255,12 +255,13 @@ class CannonModel(model.BaseModel):
 
         # Get an initial estimate of those parameters from a simple inversion.
         # (This is very much incorrect for non-linear terms).
-        finite = np.isfinite(self._coefficients[:, 0]*flux *flux_uncertainties)
-        Cinv = 1.0 / (self._scatter[finite]**2 + flux_uncertainties[finite]**2)
-        A = np.dot(self._coefficients[finite, :].T,
-            Cinv[:, None] * self._coefficients[finite, :])
-        B = np.dot(self._coefficients[finite, :].T,
-            Cinv * flux[finite])
+        use = (flux_uncertainties < kwargs.pop("max_uncertainty", np.inf)) \
+            * np.isfinite(self._coefficients[:, 0] * flux * flux_uncertainties)
+        Cinv = 1.0 / (self._scatter[use]**2 + flux_uncertainties[use]**2)
+        A = np.dot(self._coefficients[use, :].T,
+            Cinv[:, None] * self._coefficients[use, :])
+        B = np.dot(self._coefficients[use, :].T,
+            Cinv * flux[use])
         initial_vector_p0 = np.linalg.solve(A, B)
 
         # p0 contains all coefficients, but we only want the linear terms to
@@ -293,8 +294,8 @@ class CannonModel(model.BaseModel):
         full_output = kwargs.pop("full_output", False)
         kwds = kwargs.copy()
         kwds.setdefault("maxfev", 10000)
-        p_opt, covariance = op.curve_fit(f, self._coefficients[finite],
-            flux[finite], p0=p0, sigma=1.0/np.sqrt(Cinv), absolute_sigma=True,
+        p_opt, covariance = op.curve_fit(f, self._coefficients[use],
+            flux[use], p0=p0, sigma=1.0/np.sqrt(Cinv), absolute_sigma=True,
             **kwds)
 
         # We might have solved for any number of parameters, so we will return a
@@ -628,11 +629,11 @@ class CannonModel(model.BaseModel):
         Plot the label residuals.
         """
 
-        if aux is not None:
-            aux = self._labels[aux]
+        _aux = self._labels[aux] if aux is not None else None
         labels, expected, inferred = self.label_residuals
 
-        return plot.label_residuals(labels, expected, inferred, aux, **kwargs)
+        return plot.label_residuals(labels, expected, inferred, _aux, 
+            aux_label=aux, **kwargs)
 
 
 def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,
