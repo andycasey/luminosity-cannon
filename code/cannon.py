@@ -69,7 +69,7 @@ class CannonModel(model.BaseModel):
             wavelengths=wavelengths, verify=verify)
 
 
-    def train(self, label_vector_description, N=None, limits=None, pivot=False,
+    def train(self, label_vector_description, N=None, limits=None, pivot=True,
         **kwargs):
         """
         Train a Cannon model based on the label vector description provided.
@@ -293,15 +293,13 @@ class CannonModel(model.BaseModel):
         full_output = kwargs.pop("full_output", False)
         kwds = kwargs.copy()
         kwds.setdefault("maxfev", 10000)
-        labels, covariance = op.curve_fit(f, self._coefficients[finite],
+        p_opt, covariance = op.curve_fit(f, self._coefficients[finite],
             flux[finite], p0=p0, sigma=1.0/np.sqrt(Cinv), absolute_sigma=True,
             **kwds)
 
-        # We might have solved for any number of parameters, so we return a
+        # We might have solved for any number of parameters, so we will return a
         # dictionary.
-        logger.debug("TODO: apply offsets as required")
-        labels = dict(zip(names, labels))
-
+        labels = { k: p_opt[i] + self._offsets[k] for i, k in enumerate(names) }
         logger.debug("Final solution: {0}".format(labels))
 
         if full_output:
@@ -919,13 +917,17 @@ def _build_label_vector_array(labels, label_vector, N=None, limits=None,
     if N is not None:
         indices = indices[np.linspace(0, indices.sum() - 1, N, dtype=int)]
     
-    labels = labels[indices]
+    labels = labels[indices].copy()
+    unique_labels = set([_[0] for _ in sum(label_vector, [])])
+    
     if pivot:
-        raise NotImplementedError
-        offsets = labels.mean(axis=0)
-        labels -= offsets
+        offsets = {}
+        for label in unique_labels:
+            pivot_point = np.nanmean(labels[label])
+            offsets[label] = pivot_point
+            labels[label] -= pivot_point
     else:
-        offsets = np.zeros(len(labels.colnames))
+        offsets = dict(zip(unique_labels, np.zeros(len(unique_labels))))
 
     lva = _build_label_vector_rows(label_vector, labels).T
     if ignore_non_finites:
