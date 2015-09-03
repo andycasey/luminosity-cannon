@@ -8,6 +8,8 @@ __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 import sys
 import logging
 from time import time
+from collections import Counter
+from itertools import combinations_with_replacement
 
 logger = logging.getLogger("cannon")
 
@@ -63,20 +65,54 @@ def progressbar(iterable, message=None, size=100):
         sys.stdout.flush()
 
 
-def label_vector(labels, order, cross_term_order=0):
+def label_vector(labels, order, cross_term_order=0, mul="*", pow="^"):
     """
     Build a label vector description.
+
+    :param labels:
+        The labels to use in describing the label vector.
+
+    :type labels:
+        iterable
+
+    :param order:
+        The maximum order of the terms (e.g., order 3 implies A^3 is a term).
+
+    :type order:
+        int
+
+    :param cross_term_order: [optional]
+        The maximum order of the cross-terms (e.g., cross_term_order 2 implies
+        A^2*B is a term).
+    
+    :type cross_term_order:
+        int
+
+    :param mul: [optional]
+        The operator to use to represent multiplication in the description of 
+        the label vector.
+
+    :type mul:
+        str
+
+    :param pow: [optional]
+        The operator to use to represent exponents in the description of the
+        label vector.
+
+    :type pow:
+        str
+
+    :returns:
+        A human-readable form of the label vector.
     """
 
-    elements = []
-    for label in labels:
-        for i in range(order):
-            _ = label if i == 0 else "{0}^{1:.0f}".format(label, i)
-            elements.append(_)
-
-
-    # For each label, do up to the order required.
-
-    # If cross-terms are required, panic.
-
-
+    # I make no apologies; it's fun to code this way for short complex functions
+    
+    items = []
+    for o in range(1, 1 + max(order, 1 + cross_term_order)):
+        for t in map(Counter, combinations_with_replacement(labels, o)):
+            if len(t) == 1 and order >= max(t.values()) \
+            or len(t) > 1 and cross_term_order >= max(t.values()):
+                c = [pow.join([[l], [l, str(p)]][p > 1]) for l, p in t.items()]
+                if c: items.append(mul.join(map(str, c)))
+    return " ".join(items)

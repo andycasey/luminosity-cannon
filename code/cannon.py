@@ -131,8 +131,8 @@ class CannonModel(model.BaseModel):
                     logger.warn("No finite coefficients at pixel {}!".format(i))
 
         else:
-            pb_mg = "Training Cannon model in {0} parallel threads from {0} s"\
-                "tars with {1} pixels each".format(N_threads, N_stars, N_pixels)
+            pb_mg = "Training Cannon model in {0} parallel threads from {1} s"\
+                "tars with {2} pixels each".format(N_threads, N_stars, N_pixels)
 
             # Summertime!
             processes = []
