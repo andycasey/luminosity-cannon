@@ -21,6 +21,7 @@ OUTPUT_DIR = ""
 CONFIG_FILENAME = "simple_photometry.yaml"
 APOGEE_FILENAME = "APOGEE_xm_Hipparcos.fits.gz"
 
+THREADS = 20
 LOCO_CV = True
 LOO_CV = True
 
@@ -203,7 +204,7 @@ if __name__ == "__main__":
 
         # Apply quality cuts before initiating the model.
         model = cannon.CannonModel(stars, wavelengths, fluxes, flux_uncertainties)
-        model.train(config["label_vector_description"])
+        model.train(config["label_vector_description"], threads=THREADS)
         model.save(model_filename, with_data=True)
 
 
@@ -336,7 +337,8 @@ if __name__ == "__main__":
             with open(_, "rb") as fp:
                 labels, expected, inferred = pickle.load(fp)
         else:            
-            labels, expected, inferred = model.cross_validate_by_label("DESCR")
+            labels, expected, inferred = model.cross_validate_by_label("DESCR",
+                threads=THREADS)
             
             with open(_, "wb") as fp:
                 pickle.dump((labels, expected, inferred), fp, -1)
@@ -452,7 +454,7 @@ if __name__ == "__main__":
             with open(_, "rb") as fp:
                 labels, expected, inferred = pickle.load(fp)
         else:            
-            labels, expected, inferred = model.cross_validate()
+            labels, expected, inferred = model.cross_validate(threads=THREADS)
             with open(_, "wb") as fp:
                 pickle.dump((labels, expected, inferred), fp, -1)
             print("Saved LOO-CV results to {}".format(_))

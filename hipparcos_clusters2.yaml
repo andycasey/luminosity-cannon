@@ -2,13 +2,11 @@ data:
   - "data/APOGEE/Sel_Clusters/*/*.fits"
   - "data/APOGEE/aspCap/HIP*.fits"
 
-#label_vector_description: "J_ABS H_ABS K_ABS JmK J_ABS^2 H_ABS^2 K_ABS^2 JmK^2 J_ABS^3 H_ABS^3 K_ABS^3 JmK^3"
-label_vector_description: "J_ABS K_ABS JmK J_ABS^2 K_ABS^2 JmK^2 J_ABS^3 K_ABS^3 JmK^3 J_ABS^4 K_ABS^4 JmK^4 JmK*J_ABS JmK*K_ABS J_ABS*K_ABS JmK*J_ABS^2 JmK*K_ABS^2 K_ABS^2*J_ABS J_ABS^2*K_ABS JmK^2*J_ABS JmK^2*K_ABS"
-# Including TEFF from JHK, JmK brings std. dev. from 0.27 to 0.25 in J, H, K
+label_vector_description: "TEFF^4 TEFF^3 TEFF^2 TEFF LOGG LOGG^2 TEFF*LOGG TEFF^2*LOGG TEFF*LOGG^2 PARAM_M_H PARAM_M_H*TEFF PARAM_M_H*TEFF^2 PARAM_ALPHA_M PARAM_M_H*PARAM_ALPHA_M K_ABS^3 K_ABS^2 K_ABS JmK^5 JmK^4 JmK^3 JmK^2 JmK JmK^2*K_ABS JmK*K_ABS^2 JmK*K_ABS" 
 
 qc:
   # Physically reasonable range
-  - '(stars["TEFF"] > 0)  * (6000 > stars["TEFF"])'
+  - '(stars["TEFF"] > 0) * (6000 > stars["TEFF"])'
   # No dodgyness
   - 'stars["ASPCAPFLAG"] == 0'
   # Less than 10% parallax error (if it is a Hipparcos star) and small scatter in Hp magnitude
