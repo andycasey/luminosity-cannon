@@ -6,6 +6,7 @@
 __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 
 import logging
+import multiprocessing as mp
 import numpy as np
 import scipy.optimize as op
 from astropy.table import Table
@@ -13,6 +14,7 @@ from astropy.table import Table
 from . import (model, plot, utils)
 
 logger = logging.getLogger("cannon")
+
 
 class CannonModel(model.BaseModel):
 
@@ -109,21 +111,53 @@ class CannonModel(model.BaseModel):
         
         # Display a progressbar unless requested otherwise.
         pb_show = kwargs.pop("__progressbar", True)
-        pb_mesg = "Training Cannon model from {0} stars with {1} pixels each"\
-            .format(N_stars, N_pixels)
-        for i in utils.progressbar(range(N_pixels),
-            message=pb_mesg, size=N_pixels if pb_show else -1):
+        N_threads = int(max([1, kwargs.pop("threads", 1)]))
+        if N_threads == 1:
+            pb_mg = "Training Cannon model from {0} stars with {1} pixels each"\
+                .format(N_stars, N_pixels)
 
-            if np.isfinite(self._fluxes[use, i] \
-                * self._flux_uncertainties[use, i]).sum() == 0:
-                continue
+            for i in utils.progressbar(range(N_pixels),
+                message=pb_mg, size=N_pixels if pb_show else -1):
 
-            coefficients[i, :], scatter[i] = _fit_pixel(
-                self._fluxes[use, i], self._flux_uncertainties[use, i], lva,
-                **kwargs)
+                if np.isfinite(self._fluxes[use, i] \
+                    * self._flux_uncertainties[use, i]).sum() == 0:
+                    continue
 
-            if not np.any(np.isfinite(scatter[i] * coefficients[i, :])):
-                logger.warn("No finite coefficients at pixel {}!".format(i))
+                coefficients[i, :], scatter[i] = _fit_pixel(
+                    self._fluxes[use, i], self._flux_uncertainties[use, i], lva,
+                    **kwargs)
+
+                if not np.any(np.isfinite(scatter[i] * coefficients[i, :])):
+                    logger.warn("No finite coefficients at pixel {}!".format(i))
+
+        else:
+            pb_mg = "Training Cannon model in {0} parallel threads from {0} s"\
+                "tars with {1} pixels each".format(N_threads, N_stars, N_pixels)
+
+            # Summertime!
+            processes = []
+            pool = mp.Pool(N_threads)
+            for i in range(N_pixels):
+                if not np.any(np.isfinite(
+                    self._fluxes[use, i] * self._flux_uncertainties[use, i])):
+                    continue
+
+                p = pool.apply_async(_fit_pixel, args=(self._fluxes[use, i],
+                    self._flux_uncertainties[use, i], lva), kwds=kwargs)
+                processes.append((i, p))
+
+            # Collate the results.
+            for i, p in utils.progressbar(processes, message=pb_mg,
+                size=N_pixels if pb_show else -1):
+
+                coefficients[i, :], scatter[i] = p.get()
+
+                if not np.any(np.isfinite(scatter[i] * coefficients[i, :])):
+                    logger.warn("No finite coefficients at pixel {}".format(i))
+
+            # Winter is coming.
+            pool.close()
+            pool.join()
 
         self._coefficients, self._scatter, self._offsets, self._trained \
             = coefficients, scatter, offsets, True
@@ -449,6 +483,7 @@ class CannonModel(model.BaseModel):
             
             mask = np.ones(N_realisations, dtype=bool)
             mask[i] = False
+
 
             # Create a model to use so we don't overwrite self.
             model = self.__class__(self._labels[mask], self._wavelengths,
