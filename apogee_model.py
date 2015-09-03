@@ -18,7 +18,7 @@ from code import cannon, plot
 
 
 OUTPUT_DIR = ""
-CONFIG_FILENAME = "hipparcos_clusters.yaml"
+CONFIG_FILENAME = "simple_photometry.yaml"
 APOGEE_FILENAME = "APOGEE_xm_Hipparcos.fits.gz"
 
 LOCO_CV = True
@@ -181,6 +181,8 @@ if __name__ == "__main__":
     if os.path.exists(model_filename):
         model = cannon.CannonModel.from_filename(model_filename)
 
+        # TODO: Check the model has not changed.
+
     else:
         # Get the data filenames and collate the tabular data.
         filenames = data_paths(config)
@@ -190,7 +192,12 @@ if __name__ == "__main__":
         QC = quality_mask(stars, config.get("qc", None))
         stars = stars[QC]
         filenames = np.array(filenames)[QC]
-        
+
+        # Some bespoke columns.
+        stars["JmK"] = stars["J"] - stars["K"]
+        stars["JmH"] = stars["J"] - stars["H"]
+        stars["HmK"] = stars["H"] - stars["K"]
+            
         # Load the spectra
         wavelengths, fluxes, flux_uncertainties = load_spectra(filenames)
 
@@ -206,6 +213,18 @@ if __name__ == "__main__":
     fig.savefig(_)
     print("Created {}".format(_))
 
+    # Plot the scatter.
+    _ = os.path.join(OUTPUT_DIR, "{}-scatter.png".format(output_prefix))
+    fig = model.plot_model_scatter()
+    fig.savefig(_)
+    print("Created {}".format(_))
+
+
+    # Plot a random spectrum.
+    _ = os.path.join(OUTPUT_DIR, "{}-random-spectrum.png".format(output_prefix))
+    fig = model._plot_random_spectrum()
+    fig.savefig(_)
+    print("Created {}".format(_))
 
     # Plot the expected distance vs inferred distance.
     percentile = True
@@ -213,8 +232,9 @@ if __name__ == "__main__":
     filters = [_[:-4] for _ in labels if _.endswith("_ABS")]
     N_filters = len(filters)
 
+    fig = plt.figure(figsize=(N_filters * 4, 4))
     gs = GridSpec(2, N_filters, height_ratios=[1, 4])
-    axes = map(plt.subplot, gs)
+    axes = [fig.add_subplot(_) for _ in gs]
     for i, pf in enumerate(filters):
 
         expected_distance = 10**((5 + model._labels["mu"])/5.) / 1000. # [kpc]
@@ -227,7 +247,7 @@ if __name__ == "__main__":
         difference_absolute = residual_distance
         difference_percent = 100 * residual_distance / expected_distance
 
-        ax_diff, ax_relation = axes[i:i+2]
+        ax_relation, ax_diff = axes[N_filters + i], axes[i]
 
         ax_relation.scatter(expected_distance, inferred_distance, facecolor="k")
 
@@ -235,6 +255,7 @@ if __name__ == "__main__":
         ax_relation.plot([0, limit], [0, limit], c="#cccccc", zorder=-100)
         ax_relation.set_xlim(0, limit)
         ax_relation.set_ylim(0, limit)
+        ax_relation.set_title(pf)
 
         ax_diff.axhline(0, c="#cccccc", zorder=-100)
         _ = difference_percent if percentile else difference_absolute
@@ -260,6 +281,7 @@ if __name__ == "__main__":
             np.nanstd(difference_absolute),
             np.nanstd(np.abs(difference_percent))),
             fontsize=8)
+
 
     fig.tight_layout()
     _ = os.path.join(OUTPUT_DIR, "{}-distances.png".format(output_prefix))
@@ -333,8 +355,9 @@ if __name__ == "__main__":
         filters = [_[:-4] for _ in labels if _.endswith("_ABS")]
         N_filters = len(filters)
 
+        fig = plt.figure(figsize=(N_filters * 4, 4))
         gs = GridSpec(2, N_filters, height_ratios=[1, 4])
-        axes = map(plt.subplot, gs)
+        axes = [fig.add_subplot(_) for _ in gs]
         for i, pf in enumerate(filters):
 
             expected_distance = 10**((5 + model._labels["mu"])/5.) / 1000. # [kpc]
@@ -447,8 +470,10 @@ if __name__ == "__main__":
         filters = [_[:-4] for _ in labels if _.endswith("_ABS")]
         N_filters = len(filters)
 
+
+        fig = plt.figure(figsize=(N_filters * 4, 4))
         gs = GridSpec(2, N_filters, height_ratios=[1, 4])
-        axes = map(plt.subplot, gs)
+        axes = [fig.add_subplot(_) for _ in gs]
         for i, pf in enumerate(filters):
 
             expected_distance = 10**((5 + model._labels["mu"])/5.) / 1000. # [kpc]

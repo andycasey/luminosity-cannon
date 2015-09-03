@@ -208,12 +208,14 @@ class CannonModel(model.BaseModel):
                     "were given: {2}".format(len(names), len(labels),
                         ", ".join(names)))
 
+        offsets = np.array([self._offsets[name] for name in names])
+
         label_vector_indices = self._parse_label_vector_description(
             self._label_vector_description, return_indices=True,
             __columns=names)
 
         return np.dot(self._coefficients, _build_label_vector_rows(
-            label_vector_indices, labels).T).flatten()
+            label_vector_indices, labels - offsets).T).flatten()
 
 
     @model.requires_training_wheels
@@ -626,6 +628,32 @@ class CannonModel(model.BaseModel):
 
         return plot.label_residuals(labels, expected, inferred, _aux, 
             aux_label=aux, **kwargs)
+
+
+    @model.requires_training_wheels
+    def plot_model_scatter(self, **kwargs):
+        """ Plot the model scatter at each pixel. """
+
+        return plot.model_scatter(self._scatter, self._wavelengths, **kwargs)
+
+
+    @model.requires_training_wheels
+    def _plot_random_spectrum(self, **kwargs):
+        """
+        Pick a random star from the sample, plot the spectrum and the predicted
+        spectrum.
+        """
+
+        index = int(np.random.uniform(0, self._fluxes.shape[0]))
+
+        _, names = self._get_linear_indices(
+            self._label_vector_description, full_output=True)
+        model = self.predict([self._labels[name][index] for name in names])
+        return plot.spectra(self._wavelengths, self._fluxes[index], model,
+            title="Index {}".format(index), **kwargs)
+
+        
+
 
 
 def _fit_coefficients(fluxes, flux_uncertainties, scatter, lv_array,

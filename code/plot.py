@@ -108,6 +108,46 @@ def flux_residuals(model, parameter=None, percentile=False, linearise=True,
     return fig
     
 
+def model_scatter(scatter, wavelengths=None, **kwargs):
+
+    fig, ax = plt.subplots()
+    x = wavelengths if wavelengths is not None else np.arange(scatter.size) + 1
+
+    kwds = {"c": "k"}
+    kwds.update(**kwargs)
+    ax.plot(x, scatter, **kwds)
+    ax.set_xlabel("Wavelength" if wavelengths is not None else "Pixel")
+    ax.set_ylabel(r"$s_\lambda$")
+    ax.set_xlim(x[0], x[-1])
+    ax.set_ylim(0, kwargs.pop("ylim", 0.1))
+
+    fig.tight_layout()
+
+    return fig
+
+
+def spectra(wavelengths, observed_fluxes, model_fluxes, **kwargs):
+
+
+    title = kwargs.pop("title", None)
+    fig, ax = plt.subplots(figsize=(wavelengths.size / 500., 4))
+
+    ax.plot(wavelengths, observed_fluxes, c="k")
+    ax.plot(wavelengths, model_fluxes, c="r")
+
+    ax.set_xlim(wavelengths[0], wavelengths[-1])
+    ax.set_ylim(0, 1.2)
+    ax.set_xlabel("Wavelength")
+    ax.set_ylabel("Flux")
+    if title is not None:
+        ax.set_title(title)
+
+    fig.tight_layout()
+
+    return fig
+
+
+
 def label_residuals(labels, expected, inferred, aux=None, aux_label=None,
     **kwargs):
     """
