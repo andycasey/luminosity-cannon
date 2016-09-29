@@ -9,12 +9,9 @@ Authors
 -------
 - Andrew R. Casey (Cambridge)
 - Melissa Ness (MPIA)
-- Paula Jofre (Cambridge)
 - David W. Hogg (NYU/MPIA)
-- Thomas Maedler (Cambridge)
 - Hans-Walter Rix (MPIA)
 - Gerry Gilmore (Cambridge)
 - Anna Ho (MPIA)
-- Keith Hawkins (Cambridge)
 
 Copyright 2015 the authors. All rights reserved.
