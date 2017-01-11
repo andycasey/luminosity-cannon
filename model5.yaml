@@ -1,0 +1,21 @@
+data:
+  - "data/APOGEE/Sel_Clusters/*/*.fits"
+  - "data/APOGEE/aspCap/HIP*.fits"
+
+# Fourth order model of TEFF, LOGG, FEH, J_ABS, JmK with first-order cross-terms 
+label_vector_description: "TEFF LOGG PARAM_M_H J_ABS JmK TEFF^2 LOGG*TEFF TEFF*PARAM_M_H J_ABS*TEFF JmK*TEFF LOGG^2 LOGG*PARAM_M_H LOGG*J_ABS LOGG*JmK PARAM_M_H^2 J_ABS*PARAM_M_H JmK*PARAM_M_H J_ABS^2 JmK*J_ABS JmK^2 TEFF^3 LOGG*TEFF*PARAM_M_H LOGG*J_ABS*TEFF LOGG*TEFF*JmK J_ABS*TEFF*PARAM_M_H JmK*TEFF*PARAM_M_H JmK*J_ABS*TEFF LOGG^3 LOGG*J_ABS*PARAM_M_H LOGG*JmK*PARAM_M_H LOGG*J_ABS*JmK PARAM_M_H^3 JmK*J_ABS*PARAM_M_H J_ABS^3 JmK^3 TEFF^4 LOGG*J_ABS*TEFF*PARAM_M_H LOGG*JmK*TEFF*PARAM_M_H LOGG*J_ABS*TEFF*JmK JmK*J_ABS*TEFF*PARAM_M_H LOGG^4 LOGG*J_ABS*JmK*PARAM_M_H PARAM_M_H^4 J_ABS^4 JmK^4" 
+
+qc:
+  # Physically reasonable range
+  - '(stars["TEFF"] > 0) * (6000 > stars["TEFF"])'
+  # No dodgyness
+  - 'stars["ASPCAPFLAG"] == 0'
+  # Less than 10% parallax error (if it is a Hipparcos star) and small scatter in Hp magnitude
+  - '(stars["HIP"] < 0) + ((stars["e_Hpmag"] < 0.01) * (stars["Plx"] > 0) * (stars["e_Plx"]/stars["Plx"] < 0.1))'
+  # Unsaturated photometry 
+  - '(stars["K"] > 8)'
+  # Dust estimate
+  #- '(stars["SFD_EBV"] > 0)'
+
+plot:
+  aux: J

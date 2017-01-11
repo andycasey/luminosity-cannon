@@ -10,7 +10,7 @@ qc:
   # No dodgyness
   - 'stars["ASPCAPFLAG"] == 0'
   # Less than 10% parallax error (if it is a Hipparcos star) and small scatter in Hp magnitude
-  - '(stars["HIP"] < 0) + ((stars["e_Hpmag"] < 0.01) * (stars["Plx"] > 0) * (stars["e_Plx"]/stars["Plx"]) < 0.1)'
+  - '(stars["HIP"] < 0) + ((stars["e_Hpmag"] < 0.01) * (stars["Plx"] > 0) * (stars["e_Plx"]/stars["Plx"] < 0.1))'
   # Good photometry 
   - '(stars["K"] > 4)'
   # Dust estimate

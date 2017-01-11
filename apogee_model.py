@@ -8,17 +8,19 @@ __author__ = "Andy Casey <arc@ast.cam.ac.uk>"
 import cPickle as pickle
 import glob
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import os
+import sys
 import yaml
 from astropy.io import fits
 from astropy.table import Table
 from matplotlib.gridspec import GridSpec
+from matplotlib.ticker import MaxNLocator
 from code import cannon, plot
 
-
 OUTPUT_DIR = ""
-CONFIG_FILENAME = "simple_photometry.yaml"
+CONFIG_FILENAME = sys.argv[1]
 APOGEE_FILENAME = "APOGEE_xm_Hipparcos.fits.gz"
 
 THREADS = 20
@@ -325,7 +327,7 @@ if __name__ == "__main__":
         print("Created {}".format(_))
 
     else:
-        print("No Hipparcos stars in sample")
+        print("No stars in sample with Plx > 0")
 
 
     # Do cross-validation for each cluster.
@@ -372,7 +374,7 @@ if __name__ == "__main__":
             difference_absolute = residual_distance
             difference_percent = 100 * residual_distance / expected_distance
 
-            ax_diff, ax_relation = axes[i:i+2]
+            ax_relation, ax_diff = axes[N_filters + i], axes[i]
 
             ax_relation.scatter(expected_distance, inferred_distance, facecolor="k")
 
@@ -487,7 +489,7 @@ if __name__ == "__main__":
             difference_absolute = residual_distance
             difference_percent = 100 * residual_distance / expected_distance
 
-            ax_diff, ax_relation = axes[i:i+2]
+            ax_relation, ax_diff = axes[N_filters + i], axes[i]
 
             ax_relation.scatter(expected_distance, inferred_distance, facecolor="k")
 

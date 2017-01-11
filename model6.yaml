@@ -1,0 +1,21 @@
+data:
+  - "data/APOGEE/Sel_Clusters/*/*.fits"
+  - "data/APOGEE/aspCap/HIP*.fits"
+
+#In [3]: utils.label_vector(["TEFF", "LOGG", "PARAM_M_H", "J_ABS", "JmH", "HmK", "JmK"], 3, 1)
+label_vector_description: 'TEFF LOGG PARAM_M_H J_ABS JmH HmK JmK TEFF^2 LOGG*TEFF TEFF*PARAM_M_H J_ABS*TEFF JmH*TEFF TEFF*HmK JmK*TEFF LOGG^2 LOGG*PARAM_M_H LOGG*J_ABS LOGG*JmH LOGG*HmK LOGG*JmK PARAM_M_H^2 J_ABS*PARAM_M_H JmH*PARAM_M_H HmK*PARAM_M_H JmK*PARAM_M_H J_ABS^2 J_ABS*JmH J_ABS*HmK JmK*J_ABS JmH^2 JmH*HmK JmK*JmH HmK^2 JmK*HmK JmK^2 TEFF^3 LOGG*TEFF*PARAM_M_H LOGG*J_ABS*TEFF LOGG*JmH*TEFF LOGG*TEFF*HmK LOGG*TEFF*JmK J_ABS*TEFF*PARAM_M_H JmH*TEFF*PARAM_M_H HmK*TEFF*PARAM_M_H JmK*TEFF*PARAM_M_H J_ABS*TEFF*JmH J_ABS*TEFF*HmK JmK*J_ABS*TEFF JmH*TEFF*HmK JmK*JmH*TEFF JmK*TEFF*HmK LOGG^3 LOGG*J_ABS*PARAM_M_H LOGG*JmH*PARAM_M_H LOGG*HmK*PARAM_M_H LOGG*JmK*PARAM_M_H LOGG*J_ABS*JmH LOGG*J_ABS*HmK LOGG*J_ABS*JmK LOGG*JmH*HmK LOGG*JmH*JmK LOGG*JmK*HmK PARAM_M_H^3 J_ABS*JmH*PARAM_M_H J_ABS*HmK*PARAM_M_H JmK*J_ABS*PARAM_M_H JmH*HmK*PARAM_M_H JmK*JmH*PARAM_M_H JmK*HmK*PARAM_M_H J_ABS^3 J_ABS*JmH*HmK JmK*J_ABS*JmH JmK*J_ABS*HmK JmH^3 JmK*JmH*HmK HmK^3 JmK^3'
+
+qc:
+  # Physically reasonable range
+  - '(stars["TEFF"] > 0) * (6000 > stars["TEFF"])'
+  # No dodgyness
+  - 'stars["ASPCAPFLAG"] == 0'
+  # Less than 10% parallax error (if it is a Hipparcos star) and small scatter in Hp magnitude
+  - '(stars["HIP"] < 0) + ((stars["e_Hpmag"] < 0.01) * (stars["Plx"] > 0) * (stars["e_Plx"]/stars["Plx"] < 0.1))'
+  # Unsaturated photometry 
+  - '(stars["K"] > 8)'
+  # Dust estimate
+  #- '(stars["SFD_EBV"] > 0)'
+
+plot:
+  aux: J

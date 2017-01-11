@@ -2,8 +2,7 @@ data:
   - "data/APOGEE/Sel_Clusters/*/*.fits"
   - "data/APOGEE/aspCap/HIP*.fits"
 
-#label_vector_description: "J_ABS H_ABS K_ABS JmK J_ABS^2 H_ABS^2 K_ABS^2 JmK^2 J_ABS^3 H_ABS^3 K_ABS^3 JmK^3"
-label_vector_description: "J_ABS K_ABS JmK J_ABS^2 K_ABS^2 JmK^2 J_ABS^3 K_ABS^3 JmK^3 J_ABS^4 K_ABS^4 JmK^4 JmK*J_ABS JmK*K_ABS J_ABS*K_ABS JmK*J_ABS^2 JmK*K_ABS^2 K_ABS^2*J_ABS J_ABS^2*K_ABS JmK^2*J_ABS JmK^2*K_ABS"
+label_vector_description: "J_ABS K_ABS JmK J_ABS^2 J_ABS*K_ABS JmK*J_ABS K_ABS^2 JmK*K_ABS JmK^2 J_ABS^3 J_ABS^2*K_ABS JmK*J_ABS^2 J_ABS*K_ABS^2 JmK*J_ABS*K_ABS JmK^2*J_ABS K_ABS^3 JmK*K_ABS^2 JmK^2*K_ABS JmK^3 J_ABS^4 J_ABS^2*K_ABS^2 JmK*J_ABS^2*K_ABS JmK^2*J_ABS^2 JmK*J_ABS*K_ABS^2 JmK^2*J_ABS*K_ABS K_ABS^4 JmK^2*K_ABS^2 JmK^4 J_ABS^5 JmK*J_ABS^2*K_ABS^2 JmK^2*J_ABS^2*K_ABS JmK^2*J_ABS*K_ABS^2 K_ABS^5 JmK^5"
 # Including TEFF from JHK, JmK brings std. dev. from 0.27 to 0.25 in J, H, K
 
 qc:
