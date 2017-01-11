@@ -15,15 +15,16 @@ import sys
 import yaml
 from astropy.io import fits
 from astropy.table import Table
+from matplotlib.ticker import MaxNLocator
 from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import MaxNLocator
 from code import cannon, plot
 
 OUTPUT_DIR = ""
-CONFIG_FILENAME = sys.argv[1]
+CONFIG_FILENAME = "simple_photometry2.yaml"
 APOGEE_FILENAME = "APOGEE_xm_Hipparcos.fits.gz"
 
-THREADS = 20
+THREADS = 1
 LOCO_CV = True
 LOO_CV = True
 
@@ -490,7 +491,6 @@ if __name__ == "__main__":
             difference_percent = 100 * residual_distance / expected_distance
 
             ax_relation, ax_diff = axes[N_filters + i], axes[i]
-
             ax_relation.scatter(expected_distance, inferred_distance, facecolor="k")
 
             limit = max([ax_relation.get_xlim()[1], ax_relation.get_ylim()[1]])
